@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+set -e
+if [ -n "$PNPM_PACKAGE_NAME" ]; then
+  # 在工作空间环境中运行 pnpm 命令
+  pnpm exec lint-staged
+else
+  # 在普通环境中运行
+  npx lint-staged
+fi
+
