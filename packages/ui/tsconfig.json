@@ -8,9 +8,7 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@noter/ui/components/*": ["./src/components/*"],
-      "@noter/ui/hooks/*": ["./src/hooks/*"],
-      "@noter/ui/lib/*": ["./src/lib/*"]
+      "@noter/ui/*": ["./src/*"]
     }
   },
   "include": ["src"]
