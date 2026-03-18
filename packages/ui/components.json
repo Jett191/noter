@@ -12,9 +12,12 @@
   "iconLibrary": "lucide",
   "aliases": {
     "components": "@noter/ui/components",
-    "ui": "@noter/ui/components/ui",
+    "utils": "@noter/ui/lib/utils",
     "hooks": "@noter/ui/hooks",
     "lib": "@noter/ui/lib",
-    "utils": "@noter/ui/lib/utils"
-  }
+    "ui": "@noter/ui/components"
+  },
+  "rtl": false,
+  "menuColor": "default",
+  "menuAccent": "subtle"
 }
