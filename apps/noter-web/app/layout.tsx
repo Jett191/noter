@@ -2,6 +2,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 
 import '@noter/ui/globals.css'
 import { cn } from '@noter/ui/lib/utils'
+import { TooltipProvider } from '@noter/ui/components/tooltip'
 
 const fontSans = Geist({
   subsets: ['latin'],
@@ -23,7 +24,9 @@ export default function RootLayout({
       lang='en'
       suppressHydrationWarning
       className={cn('antialiased', fontMono.variable, 'font-sans', fontSans.variable)}>
-      <body>{children}</body>
+      <body>
+        <TooltipProvider>{children}</TooltipProvider>
+      </body>
     </html>
   )
 }
