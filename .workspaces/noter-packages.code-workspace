@@ -1,0 +1,15 @@
+{
+  "folders": [
+    {
+      "path": "/Users/jett/code/graduate/noter/packages"
+    }
+  ],
+  "settings": {
+    "window.title": "🧩 noter-packages",
+    "explorer.compactFolders": false,
+    "files.exclude": {
+      "**/node_modules": true,
+      "**/.git": true
+    }
+  }
+}
