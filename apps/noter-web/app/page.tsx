@@ -1,4 +1,3 @@
-'use client'
 import { Button } from '@noter/ui/components/button'
 
 function HomePage() {
