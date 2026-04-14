@@ -1,3 +1,4 @@
+'use client'
 import { cn } from '@noter/ui/lib/utils'
 import { Button } from '@noter/ui/components/button'
 import {
@@ -8,8 +9,19 @@ import {
   FieldSeparator
 } from '@noter/ui/components/field'
 import { Input } from '@noter/ui/components/input'
+import { useState } from 'react'
+import { User } from '@/types/user'
+import { useFormState } from '@/hooks/useFormState'
 
 export function SignupForm({ className, ...props }: React.ComponentProps<'form'>) {
+  const [uncheckPassword, setUncheckPassword] = useState('')
+
+  const { form, setForm, handleChange } = useFormState<User>({
+    userName: '',
+    email: '',
+    password: ''
+  })
+
   return (
     <form className={cn('flex flex-col gap-6', className)} {...props}>
       <FieldGroup>
@@ -21,7 +33,17 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
         </div>
         <Field>
           <FieldLabel htmlFor='name'>Full Name</FieldLabel>
-          <Input id='name' type='text' placeholder='John Doe' required className='bg-background' />
+          <Input
+            id='name'
+            type='text'
+            placeholder='John Doe'
+            required
+            className='bg-background'
+            onChange={(e) => {
+              setForm((prev) => ({ ...prev, email: e.target.value }))
+            }}
+            value={form.email}
+          />
         </Field>
         <Field>
           <FieldLabel htmlFor='email'>Email</FieldLabel>
@@ -31,6 +53,10 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
             placeholder='m@example.com'
             required
             className='bg-background'
+            value={form.email}
+            onChange={(e) => {
+              handleChange('email', e.target.value)
+            }}
           />
           <FieldDescription>
             We&apos;ll use this to contact you. We will not share your email with anyone else.
@@ -38,16 +64,36 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
         </Field>
         <Field>
           <FieldLabel htmlFor='password'>Password</FieldLabel>
-          <Input id='password' type='password' required className='bg-background' />
+          <Input
+            id='password'
+            type='password'
+            required
+            className='bg-background'
+            value={uncheckPassword}
+            onChange={(e) => {
+              setUncheckPassword(e.target.value)
+            }}
+          />
           <FieldDescription>Must be at least 8 characters long.</FieldDescription>
         </Field>
         <Field>
           <FieldLabel htmlFor='confirm-password'>Confirm Password</FieldLabel>
-          <Input id='confirm-password' type='password' required className='bg-background' />
+          <Input
+            id='confirm-password'
+            type='password'
+            required
+            className='bg-background'
+            value={form.password}
+            onChange={(e) => {
+              handleChange('password', e.target.value)
+            }}
+          />
           <FieldDescription>Please confirm your password.</FieldDescription>
         </Field>
         <Field>
-          <Button type='submit'>Create Account</Button>
+          <Button className='w-auto' type='submit'>
+            Create Account
+          </Button>
         </Field>
         <FieldSeparator>Or continue with</FieldSeparator>
         <Field>
