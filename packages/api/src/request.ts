@@ -6,9 +6,10 @@ import type { ApiResponse, RequestConfig } from './types'
  * 所有方法自动解包 ApiResponse，直接返回 data
  */
 export function createRequest(client: AxiosInstance) {
-  async function request<T = unknown>(config: RequestConfig): Promise<T> {
-    const response = await client.request<ApiResponse<T>>(config)
-    return response.data.data
+  async function request<T = unknown>(config: RequestConfig): Promise<T | ApiResponse<T>> {
+    const { withMeta, ...axiosConfig } = config
+    const response = await client.request<ApiResponse<T>>(axiosConfig)
+    return withMeta ? response.data : response.data.data
   }
 
   return {

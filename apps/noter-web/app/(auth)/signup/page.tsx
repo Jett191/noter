@@ -1,7 +1,10 @@
-import { LoginForm } from '@/components/login-form'
+import { SignupForm } from '@/components/admin/signup-form'
 import { GalleryVerticalEnd } from 'lucide-react'
+// import Image from 'next/image'
 
-function SigninPage() {
+// Todo: change the img to Nextjs Image
+
+function SignupPage() {
   return (
     <div className='grid min-h-svh lg:grid-cols-2'>
       <div className='flex flex-col gap-4 p-6 md:p-10'>
@@ -15,13 +18,13 @@ function SigninPage() {
         </div>
         <div className='flex flex-1 items-center justify-center'>
           <div className='w-full max-w-xs'>
-            <LoginForm />
+            <SignupForm />
           </div>
         </div>
       </div>
       <div className='bg-muted relative hidden lg:block'>
         <img
-          src='/placeholder.svg'
+          src='https://noterimg.jett191.site/Image/1290384901328.png'
           alt='Image'
           className='absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale'
         />
@@ -30,4 +33,4 @@ function SigninPage() {
   )
 }
 
-export default SigninPage
+export default SignupPage

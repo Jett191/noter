@@ -9,21 +9,40 @@ import {
   FieldSeparator
 } from '@noter/ui/components/field'
 import { Input } from '@noter/ui/components/input'
-import { useState } from 'react'
-import { User } from '@/types/user'
+import React, { useState } from 'react'
+import { RegisterParams } from '@/types/admin'
 import { useFormState } from '@/hooks/useFormState'
+import { userApi } from '@/lib/axios/auth'
+import { Spinner } from '@noter/ui/components/spinner'
 
 export function SignupForm({ className, ...props }: React.ComponentProps<'form'>) {
-  const [uncheckPassword, setUncheckPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
 
-  const { form, setForm, handleChange } = useFormState<User>({
-    userName: '',
+  const [banner, setBanner] = useState(false)
+
+  const { form, handleChange } = useFormState<RegisterParams>({
+    username: '',
     email: '',
     password: ''
   })
 
+  const passwordCheck = form.password !== confirmPassword
+
+  async function signup(e: React.SubmitEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (passwordCheck) {
+      return
+    }
+    try {
+      const res = await userApi.register(form)
+      console.log(res)
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
   return (
-    <form className={cn('flex flex-col gap-6', className)} {...props}>
+    <form className={cn('flex flex-col gap-6', className)} {...props} onSubmit={signup}>
       <FieldGroup>
         <div className='flex flex-col items-center gap-1 text-center'>
           <h1 className='text-2xl font-bold'>Create your account</h1>
@@ -38,11 +57,11 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
             type='text'
             placeholder='John Doe'
             required
+            value={form.username}
             className='bg-background'
             onChange={(e) => {
-              setForm((prev) => ({ ...prev, email: e.target.value }))
+              handleChange('username', e.target.value)
             }}
-            value={form.email}
           />
         </Field>
         <Field>
@@ -58,9 +77,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
               handleChange('email', e.target.value)
             }}
           />
-          <FieldDescription>
-            We&apos;ll use this to contact you. We will not share your email with anyone else.
-          </FieldDescription>
+          <FieldDescription>We&apos;ll use this to contact you.</FieldDescription>
         </Field>
         <Field>
           <FieldLabel htmlFor='password'>Password</FieldLabel>
@@ -69,9 +86,9 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
             type='password'
             required
             className='bg-background'
-            value={uncheckPassword}
+            value={form.password}
             onChange={(e) => {
-              setUncheckPassword(e.target.value)
+              handleChange('password', e.target.value)
             }}
           />
           <FieldDescription>Must be at least 8 characters long.</FieldDescription>
@@ -83,16 +100,27 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
             type='password'
             required
             className='bg-background'
-            value={form.password}
+            value={confirmPassword}
+            aria-invalid={passwordCheck}
             onChange={(e) => {
-              handleChange('password', e.target.value)
+              setConfirmPassword(e.target.value)
             }}
           />
-          <FieldDescription>Please confirm your password.</FieldDescription>
+          <FieldDescription>
+            {passwordCheck ? `Password is't same` : `Please confirm your password.`}
+          </FieldDescription>
         </Field>
         <Field>
-          <Button className='w-auto' type='submit'>
+          <Button
+            className='w-auto'
+            type='submit'
+            variant={banner ? 'secondary' : 'default'}
+            disabled={banner}
+            onClick={() => {
+              setBanner(true)
+            }}>
             Create Account
+            {banner && <Spinner data-icon='inline-start' />}
           </Button>
         </Field>
         <FieldSeparator>Or continue with</FieldSeparator>
@@ -107,7 +135,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
             Sign up with GitHub
           </Button>
           <FieldDescription className='px-6 text-center'>
-            Already have an account? <a href='#'>Sign in</a>
+            Already have an account? <a href='/signin'>Sign in</a>
           </FieldDescription>
         </Field>
       </FieldGroup>

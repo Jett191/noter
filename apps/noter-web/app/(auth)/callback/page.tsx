@@ -3,11 +3,7 @@ async function CallBackPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const filters = await searchParams
-
-  // const { token_hash, type } = filters
-
-  // fetch()
+  const params = await searchParams
 
   return (
     <>
@@ -16,7 +12,7 @@ async function CallBackPage({
       </div>
 
       <div className='flex h-30 max-w-3/4 items-center justify-center rounded-lg bg-pink-500 text-2xl'>
-        {JSON.stringify(filters)}
+        {JSON.stringify(params)}
       </div>
     </>
   )
