@@ -1,45 +1,25 @@
-import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { handler } from '@/utils/noterFetch/http/handler'
+import { success, error } from '@/utils/noterFetch/http/response'
+import { signUpSchema } from '@/utils/noterFetch/feature/auth/schmas'
 
-export async function POST(request: Request) {
+export const POST = handler(async (request: Request) => {
+  const body = signUpSchema.parse(await request.json())
   const supabase = await createClient()
-  try {
-    const body = await request.json()
 
-    const email = body.email?.trim()
-    const password = body.password?.trim()
-    const username = body.username?.trim()
-
-    if (!email || !password || !username) {
-      return NextResponse.json({ code: 400, message: '参数不完整' }, { status: 400 })
-    }
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username
-        }
+  const { data, error: authError } = await supabase.auth.signUp({
+    email: body.email,
+    password: body.password,
+    options: {
+      data: {
+        username: body.username
       }
-    })
-
-    if (error) {
-      return NextResponse.json({ code: 400, message: error.message }, { status: 400 })
     }
+  })
 
-    return NextResponse.json({
-      code: 200,
-      message: '注册成功',
-      data
-    })
-  } catch (error) {
-    return NextResponse.json(
-      {
-        code: 500,
-        message: error instanceof Error ? error.message : '服务器错误'
-      },
-      { status: 500 }
-    )
+  if (authError) {
+    return error(authError.message, 400)
   }
-}
+
+  return success(data, '注册成功')
+})

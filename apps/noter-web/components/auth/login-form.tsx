@@ -9,37 +9,33 @@ import {
   FieldSeparator
 } from '@noter/ui/components/field'
 import { Input } from '@noter/ui/components/input'
-import React, { SubmitEvent, useState } from 'react'
-import { RegisterParams } from '@/types/admin'
+import { SubmitEvent, useState } from 'react'
+import { LoginParams } from '@/types/auth'
 import { useFormState } from '@/hooks/useFormState'
 import { userApi } from '@/lib/axios/auth'
 import { Spinner } from '@noter/ui/components/spinner'
+import { useRouter, useSearchParams } from 'next/navigation'
 
-export function SignupForm({ className, ...props }: React.ComponentProps<'form'>) {
-  const [confirmPassword, setConfirmPassword] = useState('')
-
+export function LoginForm({ className, ...props }: React.ComponentProps<'form'>) {
   const [banner, setBanner] = useState(false)
 
-  const { form, handleChange } = useFormState<RegisterParams>({
-    username: '',
+  const { form, handleChange } = useFormState<LoginParams>({
     email: '',
     password: ''
   })
 
-  const passwordCheck = form.password !== confirmPassword
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
-  async function signup(e: SubmitEvent<HTMLFormElement>) {
+  async function login(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (passwordCheck) return
-
     try {
       setBanner(true)
-      const res = (await userApi.register(form, { withMeta: true })) as {
-        code: number
-        message: string
-        data: object
-      }
+      const res = await userApi.login(form)
+      const redirectTo = searchParams.get('redirectTo')
+      const nextPath = redirectTo?.startsWith('/') ? redirectTo : '/home'
       console.log(res)
+      router.replace(nextPath)
     } catch (error) {
       console.error(error)
     } finally {
@@ -48,28 +44,14 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
   }
 
   return (
-    <form className={cn('flex flex-col gap-6', className)} {...props} onSubmit={signup}>
+    <form className={cn('flex flex-col gap-6', className)} {...props} onSubmit={login}>
       <FieldGroup>
         <div className='flex flex-col items-center gap-1 text-center'>
-          <h1 className='text-2xl font-bold'>Create your account</h1>
+          <h1 className='text-2xl font-bold'>Login to your account</h1>
           <p className='text-muted-foreground text-sm text-balance'>
-            Fill in the form below to create your account
+            Enter your email below to login to your account
           </p>
         </div>
-        <Field>
-          <FieldLabel htmlFor='name'>Full Name</FieldLabel>
-          <Input
-            id='name'
-            type='text'
-            placeholder='John Doe'
-            required
-            value={form.username}
-            className='bg-background'
-            onChange={(e) => {
-              handleChange('username', e.target.value)
-            }}
-          />
-        </Field>
         <Field>
           <FieldLabel htmlFor='email'>Email</FieldLabel>
           <Input
@@ -78,51 +60,31 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
             placeholder='m@example.com'
             required
             className='bg-background'
-            value={form.email}
             onChange={(e) => {
               handleChange('email', e.target.value)
             }}
           />
-          <FieldDescription>We&apos;ll use this to contact you.</FieldDescription>
         </Field>
         <Field>
-          <FieldLabel htmlFor='password'>Password</FieldLabel>
+          <div className='flex items-center'>
+            <FieldLabel htmlFor='password'>Password</FieldLabel>
+            <a href='#' className='ml-auto text-sm underline-offset-4 hover:underline'>
+              Forgot your password?
+            </a>
+          </div>
           <Input
             id='password'
             type='password'
             required
             className='bg-background'
-            value={form.password}
             onChange={(e) => {
               handleChange('password', e.target.value)
             }}
           />
-          <FieldDescription>Must be at least 8 characters long.</FieldDescription>
         </Field>
         <Field>
-          <FieldLabel htmlFor='confirm-password'>Confirm Password</FieldLabel>
-          <Input
-            id='confirm-password'
-            type='password'
-            required
-            className='bg-background'
-            value={confirmPassword}
-            aria-invalid={passwordCheck}
-            onChange={(e) => {
-              setConfirmPassword(e.target.value)
-            }}
-          />
-          <FieldDescription>
-            {passwordCheck ? `Password is't same` : `Please confirm your password.`}
-          </FieldDescription>
-        </Field>
-        <Field>
-          <Button
-            className='w-auto'
-            type='submit'
-            variant={banner ? 'secondary' : 'default'}
-            disabled={banner}>
-            Create Account
+          <Button type='submit' variant={banner ? 'secondary' : 'default'} disabled={banner}>
+            Login
             {banner && <Spinner data-icon='inline-start' />}
           </Button>
         </Field>
@@ -135,10 +97,13 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
                 fill='currentColor'
               />
             </svg>
-            Sign up with GitHub
+            Login with GitHub
           </Button>
-          <FieldDescription className='px-6 text-center'>
-            Already have an account? <a href='/signin'>Sign in</a>
+          <FieldDescription className='text-center'>
+            Don&apos;t have an account?{' '}
+            <a href='/signup' className='underline underline-offset-4'>
+              Sign up
+            </a>
           </FieldDescription>
         </Field>
       </FieldGroup>

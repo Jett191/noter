@@ -5,6 +5,19 @@ export interface User {
   email: string
   password?: string
 }
+
+export interface CurrentUser {
+  id: string
+  username: string
+  email: string
+  avatarUrl: string | null
+}
+
+export interface ApiResponse<T> {
+  code: number
+  message: string
+  data: T | null
+}
 // 登录请求参数
 export interface LoginParams {
   email: string

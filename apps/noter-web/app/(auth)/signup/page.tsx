@@ -1,4 +1,4 @@
-import { SignupForm } from '@/components/admin/signup-form'
+import { SignupForm } from '@/components/auth/signup-form'
 import { GalleryVerticalEnd } from 'lucide-react'
 // import Image from 'next/image'
 

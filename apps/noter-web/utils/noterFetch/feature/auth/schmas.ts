@@ -12,3 +12,9 @@ export const emailConfirmSchema = z.object({
   token_hash: z.string().min(1, 'token_hash 缺失')
 })
 export type EmailConfirmInput = z.infer<typeof emailConfirmSchema>
+
+export const signInSchema = z.object({
+  email: z.string().trim().email('邮箱格式不正确'),
+  password: z.string().trim().min(6, '密码至少 6 位')
+})
+export type SignInInput = z.infer<typeof signInSchema>

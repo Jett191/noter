@@ -10,6 +10,10 @@ export function handler(handler: (request: Request) => Promise<Response>) {
         return error(err.issues[0]?.message || '参数错误', 400)
       }
 
+      if (err instanceof SyntaxError) {
+        return error('请求体不是合法 JSON', 400)
+      }
+
       if (err instanceof Error) {
         return error(err.message || '服务器错误', 500)
       }
