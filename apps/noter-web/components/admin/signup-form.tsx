@@ -9,7 +9,7 @@ import {
   FieldSeparator
 } from '@noter/ui/components/field'
 import { Input } from '@noter/ui/components/input'
-import React, { useState } from 'react'
+import React, { SubmitEvent, useState } from 'react'
 import { RegisterParams } from '@/types/admin'
 import { useFormState } from '@/hooks/useFormState'
 import { userApi } from '@/lib/axios/auth'
@@ -28,16 +28,22 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
 
   const passwordCheck = form.password !== confirmPassword
 
-  async function signup(e: React.SubmitEvent<HTMLFormElement>) {
+  async function signup(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (passwordCheck) {
-      return
-    }
+    if (passwordCheck) return
+
     try {
-      const res = await userApi.register(form)
+      setBanner(true)
+      const res = (await userApi.register(form, { withMeta: true })) as {
+        code: number
+        message: string
+        data: object
+      }
       console.log(res)
     } catch (error) {
       console.error(error)
+    } finally {
+      setBanner(false)
     }
   }
 
@@ -115,10 +121,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
             className='w-auto'
             type='submit'
             variant={banner ? 'secondary' : 'default'}
-            disabled={banner}
-            onClick={() => {
-              setBanner(true)
-            }}>
+            disabled={banner}>
             Create Account
             {banner && <Spinner data-icon='inline-start' />}
           </Button>

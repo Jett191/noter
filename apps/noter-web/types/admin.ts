@@ -23,11 +23,12 @@ export interface RegisterParams {
 }
 // 注册响应
 export interface SignupResult {
-  user: object
-  session: null
+  code: number
+  data: object
+  message: string
 }
 
 export interface EmailConfirmParams {
-  typy: string
+  type: string
   token_hash: string
 }

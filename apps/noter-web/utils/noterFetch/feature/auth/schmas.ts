@@ -1,4 +1,4 @@
-import { z } from 'zod/v4'
+import { z } from 'zod'
 
 export const signUpSchema = z.object({
   email: z.string().trim().email('邮箱格式不正确'),
