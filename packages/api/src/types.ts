@@ -1,9 +1,14 @@
-import type { AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
+import type {
+  AxiosRequestConfig,
+  AxiosResponse,
+  InternalAxiosRequestConfig,
+  AxiosError
+} from 'axios'
 
 /** 后端统一响应结构 — 根据实际后端调整 */
 export interface ApiResponse<T = unknown> {
   code: number
-  data: T
+  data: T | null
   message: string
 }
 
@@ -25,4 +30,4 @@ export type RequestConfig = AxiosRequestConfig & {
   skipErrorHandler?: boolean
 }
 
-export type { AxiosResponse, AxiosRequestConfig }
+export type { AxiosResponse, AxiosRequestConfig, AxiosError }

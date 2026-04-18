@@ -11,6 +11,7 @@
     "files.exclude": {
       "**/node_modules": true,
       "**/.git": true
-    }
+    },
+    "js/ts.tsdk.path": "node_modules/typescript/lib"
   }
 }
