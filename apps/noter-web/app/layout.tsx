@@ -4,6 +4,8 @@ import '@noter/ui/globals.css'
 import { cn } from '@noter/ui/lib/utils'
 import { TooltipProvider } from '@noter/ui/components/tooltip'
 
+// 加入未登录的页面拦截
+
 const fontSans = Geist({
   subsets: ['latin'],
   variable: '--font-sans'

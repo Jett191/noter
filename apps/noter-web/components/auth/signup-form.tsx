@@ -34,11 +34,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'form'>
 
     try {
       setBanner(true)
-      const res = (await userApi.register(form, { withMeta: true })) as {
-        code: number
-        message: string
-        data: object
-      }
+      const res = await userApi.register(form)
       console.log(res)
     } catch (error) {
       console.error(error)

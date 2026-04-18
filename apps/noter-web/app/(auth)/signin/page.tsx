@@ -21,7 +21,7 @@ function SigninPage() {
       </div>
       <div className='bg-muted relative hidden lg:block'>
         <img
-          src='/placeholder.svg'
+          src='https://noterimg.jett191.site/Image/84127345102358.png'
           alt='Image'
           className='absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale'
         />

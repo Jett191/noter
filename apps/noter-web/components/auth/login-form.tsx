@@ -14,7 +14,8 @@ import { LoginParams } from '@/types/auth'
 import { useFormState } from '@/hooks/useFormState'
 import { userApi } from '@/lib/axios/auth'
 import { Spinner } from '@noter/ui/components/spinner'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
+import { useUserStore } from '@/stores/user'
 
 export function LoginForm({ className, ...props }: React.ComponentProps<'form'>) {
   const [banner, setBanner] = useState(false)
@@ -24,18 +25,18 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'form'>)
     password: ''
   })
 
+  const setUser = useUserStore((s) => s.setUser)
+
   const router = useRouter()
-  const searchParams = useSearchParams()
 
   async function login(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     try {
       setBanner(true)
-      const res = await userApi.login(form)
-      const redirectTo = searchParams.get('redirectTo')
-      const nextPath = redirectTo?.startsWith('/') ? redirectTo : '/home'
-      console.log(res)
-      router.replace(nextPath)
+      await userApi.login(form)
+      const user = await userApi.getProfile()
+      setUser(user)
+      router.replace('/home')
     } catch (error) {
       console.error(error)
     } finally {

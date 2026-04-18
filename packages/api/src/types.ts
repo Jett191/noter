@@ -8,7 +8,7 @@ import type {
 /** 后端统一响应结构 — 根据实际后端调整 */
 export interface ApiResponse<T = unknown> {
   code: number
-  data: T
+  data: T | null
   message: string
 }
 
@@ -28,7 +28,6 @@ export interface CreateClientOptions {
 export type RequestConfig = AxiosRequestConfig & {
   /** 是否跳过统一错误处理 */
   skipErrorHandler?: boolean
-  withMeta?: boolean
 }
 
 export type { AxiosResponse, AxiosRequestConfig, AxiosError }
