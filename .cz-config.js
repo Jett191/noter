@@ -16,10 +16,9 @@ module.exports = {
 
   scopes: [
     { name: 'components' },
-    { name: 'page' },
-    { name: 'css' },
+    { name: 'packages' },
+    { name: 'style' },
     { name: 'api' },
-    { name: 'README.md' },
     { name: 'custom' }
   ],
 

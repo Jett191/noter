@@ -1,0 +1,17 @@
+{
+  "folders": [
+    {
+      "name": "noter-web",
+      "path": "../apps/noter-web"
+    }
+  ],
+  "settings": {
+    "window.title": "🌐 noter-web",
+    "explorer.compactFolders": false,
+    "files.exclude": {
+      "**/node_modules": true,
+      "**/.git": true
+    },
+    "js/ts.tsdk.path": "node_modules/typescript/lib"
+  }
+}

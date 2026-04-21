@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./apps/noter-web" },
+    { "path": "./apps/noter-server" },
+    { "path": "./packages/ui" }
+  ]
+}
