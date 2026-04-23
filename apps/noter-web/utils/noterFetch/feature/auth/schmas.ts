@@ -18,3 +18,10 @@ export const signInSchema = z.object({
   password: z.string().trim().min(6, '密码至少 6 位')
 })
 export type SignInInput = z.infer<typeof signInSchema>
+
+// 更新用户信息请求校验
+export const updateProfileSchema = z.object({
+  username: z.string().trim().min(2, '用户名至少 2 位').optional(),
+  avatar_url: z.string().trim().url('头像 URL 格式不正确').optional()
+})
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>

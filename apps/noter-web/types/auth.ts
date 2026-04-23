@@ -45,3 +45,9 @@ export interface EmailConfirmParams {
   type: string
   token_hash: string
 }
+
+// 更新用户信息请求参数
+export interface UpdateProfileParams {
+  username?: string
+  avatar_url?: string
+}

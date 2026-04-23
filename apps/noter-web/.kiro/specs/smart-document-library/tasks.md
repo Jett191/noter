@@ -95,11 +95,11 @@
     - 调用 Supabase Auth signOut 清除服务端 session
     - 遵循 handler() + success()/error() 模式
     - _需求: 2.4_
-  - [ ] 5.2 实现用户信息更新 API `app/api/auth/profile/route.ts` (PATCH)
+  - [x] 5.2 实现用户信息更新 API `app/api/auth/profile/route.ts` (PATCH)
     - 支持更新用户名和头像，使用 Zod 校验请求体
     - 更新 profiles 表对应记录
     - _需求: 3.1, 3.2_
-  - [ ] 5.3 在 login-form 中添加退出登录按钮和加载状态
+  - [x] 5.3 在用户页UserHomePage添加退出登录按钮,登录页添加载指示器
     - 登录请求处理中显示加载指示器并禁用提交按钮
     - 在已登录状态下提供退出按钮，调用 signout API 后跳转登录页
     - _需求: 2.3, 2.4_
