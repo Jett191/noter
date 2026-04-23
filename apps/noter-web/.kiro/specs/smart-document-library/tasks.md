@@ -103,12 +103,12 @@
     - 登录请求处理中显示加载指示器并禁用提交按钮
     - 在已登录状态下提供退出按钮，调用 signout API 后跳转登录页
     - _需求: 2.3, 2.4_
-  - [ ] 5.4 实现个人信息管理页面 `app/(main)/profile/page.tsx`
+  - [x] 5.4 实现个人信息管理页面 `app/(main)/profile/page.tsx`
     - 展示用户名、邮箱、头像信息
     - 支持编辑用户名和头像并提交更新
     - 使用 useFormState hook 管理表单状态
     - _需求: 3.1, 3.2, 3.3_
-  - [ ] 5.5 实现 GitHub 第三方登录
+  - [x] 5.5 实现 GitHub 第三方登录
     - 在登录页添加 GitHub 登录按钮
     - 创建 `app/api/auth/github/route.ts` 调用 Supabase Auth signInWithOAuth
     - 在 callback 页面处理 GitHub OAuth 回调，自动创建/关联用户

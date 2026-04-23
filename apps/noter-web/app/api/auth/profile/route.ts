@@ -38,6 +38,7 @@ export const PATCH = handler(async (request: Request) => {
   }
 
   const body = await request.json()
+
   const parsed = updateProfileSchema.parse(body)
 
   // 至少需要提供一个更新字段
@@ -62,6 +63,7 @@ export const PATCH = handler(async (request: Request) => {
     .single()
 
   if (dbError) {
+    console.log(data)
     return error('更新用户信息失败', 500)
   }
 

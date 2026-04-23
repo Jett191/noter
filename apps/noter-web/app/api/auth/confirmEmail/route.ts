@@ -32,5 +32,5 @@ export const GET = handler(async (request: Request) => {
     )
   }
 
-  return NextResponse.redirect(new URL('/notes', origin))
+  return NextResponse.redirect(new URL('/home', origin))
 })

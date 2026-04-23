@@ -12,7 +12,7 @@ export const POST = handler(async (request: Request) => {
     password: body.password,
     options: {
       data: {
-        username: body.username
+        user_name: body.username
       }
     }
   })
