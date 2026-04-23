@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "name": "Update Docs on Source Change",
+  "description": "编辑完成后，请代理审查所做的更改，并更新design 文档，以反映项目的最新状态",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "编辑完成后，请代理审查所做的更改，并更新design 文档，以反映项目的最新状态"
+  },
+  "workspaceFolderName": "noter-web",
+  "shortName": "update-docs-on-change"
+}

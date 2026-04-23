@@ -8,80 +8,80 @@
 
 ## 任务
 
-- [ ] 1. 基础设施：TypeScript 类型定义与 Zod Schema
-  - [ ] 1.1 创建文档相关类型定义 `types/document.ts`
+- [x] 1. 基础设施：TypeScript 类型定义与 Zod Schema
+  - [x] 1.1 创建文档相关类型定义 `types/document.ts`
     - 定义 Document、DocumentBlock、DocumentSnapshot、DocumentChunk 等接口
     - 定义分页参数和响应类型 PaginatedResult、ListParams、BlockParams
     - _需求: 5.5, 6.1, 7.2_
-  - [ ] 1.2 创建标注与笔记类型定义 `types/annotation.ts`
+  - [x] 1.2 创建标注与笔记类型定义 `types/annotation.ts`
     - 定义 Annotation、CreateAnnotationInput、UpdateAnnotationInput 接口
     - 定义锚定信息 Anchor 类型
     - _需求: 9.1, 10.2_
-  - [ ] 1.3 创建 AI 模块类型定义 `types/ai.ts`
+  - [x] 1.3 创建 AI 模块类型定义 `types/ai.ts`
     - 定义 ChatMessage、ChatInput、ChatResponse、SummaryResponse 等接口
     - 定义 ExplainInput、GenerateNoteInput、KeyPointsResponse、OutlineResponse 接口
     - _需求: 13.1, 14.1, 15.1, 16.1, 17.1_
-  - [ ] 1.4 创建搜索模块类型定义 `types/search.ts`
+  - [x] 1.4 创建搜索模块类型定义 `types/search.ts`
     - 定义 SearchResult、SearchParams 接口
     - _需求: 18.1, 20.1_
-  - [ ] 1.5 创建文档模块 Zod Schema `utils/noterFetch/feature/documents/schemas.ts`
+  - [x] 1.5 创建文档模块 Zod Schema `utils/noterFetch/feature/documents/schemas.ts`
     - 实现 uploadSchema、updateDocSchema、visibilitySchema
     - _需求: 5.1, 5.4, 6.3, 6.5_
-  - [ ] 1.6 创建标注模块 Zod Schema `utils/noterFetch/feature/annotations/schemas.ts`
+  - [x] 1.6 创建标注模块 Zod Schema `utils/noterFetch/feature/annotations/schemas.ts`
     - 实现 createAnnotationSchema、updateAnnotationSchema
     - _需求: 9.1, 9.3, 10.2_
-  - [ ] 1.7 创建 AI 模块 Zod Schema `utils/noterFetch/feature/ai/schemas.ts`
+  - [x] 1.7 创建 AI 模块 Zod Schema `utils/noterFetch/feature/ai/schemas.ts`
     - 实现 chatSchema、summarizeSchema、explainSchema、generateNoteSchema、keyPointsSchema、outlineSchema
     - _需求: 13.1, 14.1, 17.1_
-  - [ ] 1.8 创建搜索模块 Zod Schema `utils/noterFetch/feature/search/schemas.ts`
+  - [x] 1.8 创建搜索模块 Zod Schema `utils/noterFetch/feature/search/schemas.ts`
     - 实现 searchSchema
     - _需求: 18.1, 19.1_
 
-  - [ ]* 1.9 编写 Zod Schema 属性测试
+  - [ ] 1.9 编写 Zod Schema 属性测试
     - **Property 26: 全局输入校验**
     - 对所有 schema 使用 fast-check 生成随机非法输入，验证 safeParse 返回失败
     - **验证: 需求 1.2, 21.4**
 
-- [ ] 2. 基础设施：测试框架与 HTTP 客户端
-  - [ ] 2.1 配置 Vitest 测试框架
+- [x] 2. 基础设施：测试框架与 HTTP 客户端
+  - [x] 2.1 配置 Vitest 测试框架
     - 安装 vitest、@testing-library/react、fast-check 依赖
     - 创建 vitest.config.ts 配置文件
     - 创建 `__tests__/` 目录结构（unit/、properties/、integration/）
     - _需求: 无（基础设施）_
-  - [ ] 2.2 创建文档 HTTP 客户端 `lib/axios/documents.ts`
+  - [x] 2.2 创建文档 HTTP 客户端 `lib/axios/documents.ts`
     - 实现 documentApi 对象，包含 upload、list、getById、update、delete、setVisibility、download、getBlocks 方法
     - _需求: 5.1, 6.1, 7.3, 8.1_
-  - [ ] 2.3 创建标注 HTTP 客户端 `lib/axios/annotations.ts`
+  - [x] 2.3 创建标注 HTTP 客户端 `lib/axios/annotations.ts`
     - 实现 annotationApi 对象，包含 create、list、update、delete 方法
     - _需求: 9.1, 10.2, 11.2, 11.3_
-  - [ ] 2.4 创建 AI HTTP 客户端 `lib/axios/ai.ts`
+  - [x] 2.4 创建 AI HTTP 客户端 `lib/axios/ai.ts`
     - 实现 aiApi 对象，包含 chat、summarize、explain、generateNote、keyPoints、outline、history 方法
     - _需求: 13.1, 14.1, 15.1, 16.1, 17.1_
-  - [ ] 2.5 创建搜索 HTTP 客户端 `lib/axios/search.ts`
+  - [x] 2.5 创建搜索 HTTP 客户端 `lib/axios/search.ts`
     - 实现 searchApi 对象，包含 search 方法
     - _需求: 18.1_
 
 - [ ] 3. 检查点 — 基础设施验证
   - 确保所有类型定义、Zod Schema、HTTP 客户端编译通过，测试框架可运行。如有问题请向用户确认。
 
-- [ ] 4. 数据库：Supabase 迁移脚本
-  - [ ] 4.1 创建 documents 表迁移
+- [x] 4. 数据库：Supabase 迁移脚本
+  - [x] 4.1 创建 documents 表迁移
     - 编写 SQL 创建 documents 表，包含所有字段、约束和索引
     - 配置 RLS 策略：SELECT 允许 owner 或 shared，INSERT/UPDATE/DELETE 仅 owner
     - 创建 Supabase Storage bucket `documents`
     - _需求: 5.1, 5.5, 6.5, 6.6, 6.7, 21.1_
-  - [ ] 4.2 创建 document_snapshots 表迁移
+  - [x] 4.2 创建 document_snapshots 表迁移
     - 编写 SQL 创建 document_snapshots 表，包含唯一约束 (document_id, version)
     - _需求: 7.1_
-  - [ ] 4.3 创建 document_blocks 表迁移
+  - [x] 4.3 创建 document_blocks 表迁移
     - 编写 SQL 创建 document_blocks 表，包含唯一约束 (snapshot_id, block_order) 和页码索引
     - _需求: 7.2, 7.3_
-  - [ ] 4.4 创建 document_chunks 和 chunk_embeddings 表迁移
+  - [x] 4.4 创建 document_chunks 和 chunk_embeddings 表迁移
     - 启用 pgvector 扩展
     - 创建 document_chunks 表，包含 tsvector 列和 GIN 索引
     - 创建 chunk_embeddings 表，包含 vector 列和 HNSW 索引
     - _需求: 18.1, 19.1_
-  - [ ] 4.5 创建 document_annotations 表迁移
+  - [x] 4.5 创建 document_annotations 表迁移
     - 编写 SQL 创建 document_annotations 表
     - 配置 RLS 策略：所有操作仅 user_id = auth.uid()
     - _需求: 9.4, 11.4, 21.2_
@@ -91,7 +91,7 @@
     - **验证: 需求 6.5, 6.6, 6.7, 11.4, 21.1, 21.2**
 
 - [ ] 5. 用户模块补充：退出登录、信息管理、第三方登录
-  - [ ] 5.1 实现退出登录 API `app/api/auth/signout/route.ts`
+  - [x] 5.1 实现退出登录 API `app/api/auth/signout/route.ts`
     - 调用 Supabase Auth signOut 清除服务端 session
     - 遵循 handler() + success()/error() 模式
     - _需求: 2.4_

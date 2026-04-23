@@ -19,6 +19,7 @@
 - 状态管理使用 Zustand，表单校验使用 Zod
 - 数据库使用 Supabase (PostgreSQL)，文件存储使用 Supabase Storage
 - 代码注释和 API 消息使用中文
+- 包管理器为pnpm
 
 ---
 
