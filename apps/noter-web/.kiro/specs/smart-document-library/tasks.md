@@ -1,0 +1,436 @@
+# 实现计划：智能文档库系统
+
+## 概述
+
+基于现有 Next.js 16 + Supabase 技术栈，按模块依赖关系逐步实现智能文档库系统。已有的用户注册、登录、邮箱验证、用户信息获取、UserProvider、Zustand User Store、HTTP 客户端封装、统一错误处理等功能不再重复实现。
+
+实现顺序：基础设施（类型、Schema、测试框架） → 数据库 → 文档模块 → 阅读器模块 → 标注笔记模块 → AI 模块 → 搜索模块 → 安全与集成。
+
+## 任务
+
+- [ ] 1. 基础设施：TypeScript 类型定义与 Zod Schema
+  - [ ] 1.1 创建文档相关类型定义 `types/document.ts`
+    - 定义 Document、DocumentBlock、DocumentSnapshot、DocumentChunk 等接口
+    - 定义分页参数和响应类型 PaginatedResult、ListParams、BlockParams
+    - _需求: 5.5, 6.1, 7.2_
+  - [ ] 1.2 创建标注与笔记类型定义 `types/annotation.ts`
+    - 定义 Annotation、CreateAnnotationInput、UpdateAnnotationInput 接口
+    - 定义锚定信息 Anchor 类型
+    - _需求: 9.1, 10.2_
+  - [ ] 1.3 创建 AI 模块类型定义 `types/ai.ts`
+    - 定义 ChatMessage、ChatInput、ChatResponse、SummaryResponse 等接口
+    - 定义 ExplainInput、GenerateNoteInput、KeyPointsResponse、OutlineResponse 接口
+    - _需求: 13.1, 14.1, 15.1, 16.1, 17.1_
+  - [ ] 1.4 创建搜索模块类型定义 `types/search.ts`
+    - 定义 SearchResult、SearchParams 接口
+    - _需求: 18.1, 20.1_
+  - [ ] 1.5 创建文档模块 Zod Schema `utils/noterFetch/feature/documents/schemas.ts`
+    - 实现 uploadSchema、updateDocSchema、visibilitySchema
+    - _需求: 5.1, 5.4, 6.3, 6.5_
+  - [ ] 1.6 创建标注模块 Zod Schema `utils/noterFetch/feature/annotations/schemas.ts`
+    - 实现 createAnnotationSchema、updateAnnotationSchema
+    - _需求: 9.1, 9.3, 10.2_
+  - [ ] 1.7 创建 AI 模块 Zod Schema `utils/noterFetch/feature/ai/schemas.ts`
+    - 实现 chatSchema、summarizeSchema、explainSchema、generateNoteSchema、keyPointsSchema、outlineSchema
+    - _需求: 13.1, 14.1, 17.1_
+  - [ ] 1.8 创建搜索模块 Zod Schema `utils/noterFetch/feature/search/schemas.ts`
+    - 实现 searchSchema
+    - _需求: 18.1, 19.1_
+
+  - [ ]* 1.9 编写 Zod Schema 属性测试
+    - **Property 26: 全局输入校验**
+    - 对所有 schema 使用 fast-check 生成随机非法输入，验证 safeParse 返回失败
+    - **验证: 需求 1.2, 21.4**
+
+- [ ] 2. 基础设施：测试框架与 HTTP 客户端
+  - [ ] 2.1 配置 Vitest 测试框架
+    - 安装 vitest、@testing-library/react、fast-check 依赖
+    - 创建 vitest.config.ts 配置文件
+    - 创建 `__tests__/` 目录结构（unit/、properties/、integration/）
+    - _需求: 无（基础设施）_
+  - [ ] 2.2 创建文档 HTTP 客户端 `lib/axios/documents.ts`
+    - 实现 documentApi 对象，包含 upload、list、getById、update、delete、setVisibility、download、getBlocks 方法
+    - _需求: 5.1, 6.1, 7.3, 8.1_
+  - [ ] 2.3 创建标注 HTTP 客户端 `lib/axios/annotations.ts`
+    - 实现 annotationApi 对象，包含 create、list、update、delete 方法
+    - _需求: 9.1, 10.2, 11.2, 11.3_
+  - [ ] 2.4 创建 AI HTTP 客户端 `lib/axios/ai.ts`
+    - 实现 aiApi 对象，包含 chat、summarize、explain、generateNote、keyPoints、outline、history 方法
+    - _需求: 13.1, 14.1, 15.1, 16.1, 17.1_
+  - [ ] 2.5 创建搜索 HTTP 客户端 `lib/axios/search.ts`
+    - 实现 searchApi 对象，包含 search 方法
+    - _需求: 18.1_
+
+- [ ] 3. 检查点 — 基础设施验证
+  - 确保所有类型定义、Zod Schema、HTTP 客户端编译通过，测试框架可运行。如有问题请向用户确认。
+
+- [ ] 4. 数据库：Supabase 迁移脚本
+  - [ ] 4.1 创建 documents 表迁移
+    - 编写 SQL 创建 documents 表，包含所有字段、约束和索引
+    - 配置 RLS 策略：SELECT 允许 owner 或 shared，INSERT/UPDATE/DELETE 仅 owner
+    - 创建 Supabase Storage bucket `documents`
+    - _需求: 5.1, 5.5, 6.5, 6.6, 6.7, 21.1_
+  - [ ] 4.2 创建 document_snapshots 表迁移
+    - 编写 SQL 创建 document_snapshots 表，包含唯一约束 (document_id, version)
+    - _需求: 7.1_
+  - [ ] 4.3 创建 document_blocks 表迁移
+    - 编写 SQL 创建 document_blocks 表，包含唯一约束 (snapshot_id, block_order) 和页码索引
+    - _需求: 7.2, 7.3_
+  - [ ] 4.4 创建 document_chunks 和 chunk_embeddings 表迁移
+    - 启用 pgvector 扩展
+    - 创建 document_chunks 表，包含 tsvector 列和 GIN 索引
+    - 创建 chunk_embeddings 表，包含 vector 列和 HNSW 索引
+    - _需求: 18.1, 19.1_
+  - [ ] 4.5 创建 document_annotations 表迁移
+    - 编写 SQL 创建 document_annotations 表
+    - 配置 RLS 策略：所有操作仅 user_id = auth.uid()
+    - _需求: 9.4, 11.4, 21.2_
+  - [ ]* 4.6 编写数据库 RLS 属性测试
+    - **Property 7: 文档可见性访问控制**
+    - **Property 24: 标注数据隔离**
+    - **验证: 需求 6.5, 6.6, 6.7, 11.4, 21.1, 21.2**
+
+- [ ] 5. 用户模块补充：退出登录、信息管理、第三方登录
+  - [ ] 5.1 实现退出登录 API `app/api/auth/signout/route.ts`
+    - 调用 Supabase Auth signOut 清除服务端 session
+    - 遵循 handler() + success()/error() 模式
+    - _需求: 2.4_
+  - [ ] 5.2 实现用户信息更新 API `app/api/auth/profile/route.ts` (PATCH)
+    - 支持更新用户名和头像，使用 Zod 校验请求体
+    - 更新 profiles 表对应记录
+    - _需求: 3.1, 3.2_
+  - [ ] 5.3 在 login-form 中添加退出登录按钮和加载状态
+    - 登录请求处理中显示加载指示器并禁用提交按钮
+    - 在已登录状态下提供退出按钮，调用 signout API 后跳转登录页
+    - _需求: 2.3, 2.4_
+  - [ ] 5.4 实现个人信息管理页面 `app/(main)/profile/page.tsx`
+    - 展示用户名、邮箱、头像信息
+    - 支持编辑用户名和头像并提交更新
+    - 使用 useFormState hook 管理表单状态
+    - _需求: 3.1, 3.2, 3.3_
+  - [ ] 5.5 实现 GitHub 第三方登录
+    - 在登录页添加 GitHub 登录按钮
+    - 创建 `app/api/auth/github/route.ts` 调用 Supabase Auth signInWithOAuth
+    - 在 callback 页面处理 GitHub OAuth 回调，自动创建/关联用户
+    - _需求: 4.1, 4.2, 4.3_
+  - [ ]* 5.6 编写用户信息更新属性测试
+    - **Property 2: 用户信息更新往返**
+    - **验证: 需求 3.1, 3.2**
+
+- [ ] 6. 文档模块：上传与存储
+  - [ ] 6.1 实现文档上传 API `app/api/documents/upload/route.ts`
+    - 接收 FormData，校验文件格式（仅支持 Markdown）
+    - 上传文件到 Supabase Storage `documents` bucket
+    - 创建 documents 表记录（status: uploaded），记录文件名、大小、MIME 类型
+    - 不支持的格式返回 415 错误
+    - _需求: 5.1, 5.2, 5.4, 5.5_
+  - [ ] 6.2 实现 Markdown 文档解析引擎 `lib/parser/markdown.ts`
+    - 解析 Markdown 为结构化 JSON（content_json）
+    - 拆分为 document_blocks（heading、paragraph、list_item、quote、code、table、image、divider）
+    - 计算每个块的 char_start/char_end 偏移量
+    - 生成 plain_text 纯文本
+    - _需求: 7.2_
+  - [ ] 6.3 实现文档解析流水线 `lib/parser/pipeline.ts`
+    - 上传后异步触发解析：documents.status → parsing
+    - 创建 document_snapshots 记录
+    - 生成 document_blocks
+    - 拆分 document_chunks（按 token 数量分片）
+    - 更新 documents.status → indexed/failed
+    - _需求: 7.1, 7.4, 7.5_
+  - [ ]* 6.4 编写文档上传属性测试
+    - **Property 3: 文档上传完整性**
+    - **验证: 需求 5.1, 5.4, 5.5**
+
+- [ ] 7. 文档模块：列表管理与 CRUD
+  - [ ] 7.1 实现文档列表 API `app/api/documents/route.ts` (GET)
+    - 支持分页查询（page、pageSize 参数）
+    - 返回文档列表含文件名、上传时间、状态，以及分页元数据
+    - RLS 自动过滤仅返回用户自己的文档
+    - _需求: 6.1, 6.2_
+  - [ ] 7.2 实现文档详情 API `app/api/documents/[id]/route.ts` (GET)
+    - 返回单个文档完整信息
+    - 支持 shared 文档的跨用户访问
+    - _需求: 6.6, 6.7_
+  - [ ] 7.3 实现文档更新 API `app/api/documents/[id]/route.ts` (PATCH)
+    - 使用 updateDocSchema 校验，支持更新描述信息
+    - _需求: 6.3_
+  - [ ] 7.4 实现文档删除 API `app/api/documents/[id]/route.ts` (DELETE)
+    - 级联删除：snapshots → blocks → chunks → embeddings → annotations
+    - 删除 Supabase Storage 中的原始文件
+    - _需求: 6.4_
+  - [ ] 7.5 实现文档可见性 API `app/api/documents/[id]/visibility/route.ts` (PATCH)
+    - 使用 visibilitySchema 校验，更新 visibility 字段
+    - _需求: 6.5, 6.6, 6.7_
+  - [ ] 7.6 实现文档下载 API `app/api/documents/[id]/download/route.ts` (GET)
+    - 从 Supabase Storage 获取原始文件并返回
+    - _需求: 8.1, 8.2_
+  - [ ] 7.7 实现渲染块查询 API `app/api/documents/[id]/blocks/route.ts` (GET)
+    - 支持按页码和分页参数查询 document_blocks
+    - 返回按 block_order 排序的块数据
+    - _需求: 7.2, 7.3_
+  - [ ]* 7.8 编写文档 CRUD 属性测试
+    - **Property 4: 文档列表分页**
+    - **Property 5: 文档描述更新往返**
+    - **Property 6: 文档级联删除**
+    - **Property 9: 渲染块分页加载**
+    - **Property 10: 文件下载往返**
+    - **验证: 需求 6.1, 6.2, 6.3, 6.4, 7.3, 8.1, 8.2**
+
+- [ ] 8. 检查点 — 文档后端验证
+  - 确保文档上传、解析、CRUD、下载 API 全部可用，数据库迁移正确。如有问题请向用户确认。
+
+- [ ] 9. 文档模块：Zustand Store 与前端页面
+  - [ ] 9.1 创建文档 Zustand Store `stores/document.ts`
+    - 实现 DocumentState 接口：documents、pagination、loading
+    - 实现 fetchDocuments、deleteDocument、updateVisibility 方法
+    - _需求: 6.1, 6.4, 6.5_
+  - [ ] 9.2 实现文档上传组件 `components/documents/DocumentUploader.tsx`
+    - 支持拖拽和文件选择上传
+    - 校验文件格式（仅 Markdown），不支持格式显示提示
+    - 显示上传进度反馈
+    - 使用 @noter/ui 组件
+    - _需求: 5.1, 5.2, 5.3, 5.4_
+  - [ ] 9.3 实现文档卡片组件 `components/documents/DocumentCard.tsx`
+    - 展示文件名、上传时间、状态标识
+    - 包含操作菜单（编辑描述、设置可见性、删除、下载）
+    - _需求: 6.1, 6.3, 6.4, 6.5_
+  - [ ] 9.4 实现文档状态标识组件 `components/documents/DocumentStatusBadge.tsx`
+    - 根据 status 字段显示不同颜色和文本的状态标识
+    - _需求: 6.1, 7.4_
+  - [ ] 9.5 实现文档列表组件 `components/documents/DocumentList.tsx`
+    - 使用 DocumentCard 渲染文档列表
+    - 支持分页控件
+    - _需求: 6.1, 6.2_
+  - [ ] 9.6 实现文档列表页面 `app/(main)/documents/page.tsx`
+    - 组合 DocumentUploader 和 DocumentList
+    - 连接 document store 获取数据
+    - _需求: 6.1, 6.2_
+
+- [ ] 10. 文档阅读器模块
+  - [ ] 10.1 创建阅读器 Zustand Store `stores/reader.ts`
+    - 实现 ReaderState 接口：document、blocks、annotations、loadingBlocks
+    - 实现 fetchDocument、fetchBlocks、fetchAnnotations 方法
+    - _需求: 7.1, 12.1_
+  - [ ] 10.2 实现块渲染器组件 `components/reader/BlockRenderer.tsx`
+    - 根据 block_type 渲染不同内容类型（heading、paragraph、list_item、quote、code、table、image、divider）
+    - 使用 @chenglou/pretext 进行文本测量和布局计算
+    - _需求: 7.2_
+  - [ ] 10.3 实现虚拟滚动容器 `components/reader/VirtualScroller.tsx`
+    - 维护块高度映射表，仅渲染视口内 ± 缓冲区的块
+    - 支持大文档按页分批请求 blocks，滚动到边界时预加载
+    - _需求: 7.3_
+  - [ ] 10.4 实现文本选中浮动工具栏 `components/reader/TextSelectionToolbar.tsx`
+    - 监听文本选中事件，显示浮动工具栏
+    - 提供高亮、下划线、添加笔记、AI 解释等操作按钮
+    - _需求: 9.1, 10.1, 17.1_
+  - [ ] 10.5 实现文档阅读主容器 `components/reader/DocumentReader.tsx`
+    - 组合 VirtualScroller、BlockRenderer、TextSelectionToolbar
+    - 根据 document.status 显示不同状态（parsing 显示处理中、failed 显示失败并提供重新解析）
+    - _需求: 7.1, 7.4, 7.5_
+  - [ ] 10.6 实现文档阅读页面 `app/(main)/documents/[id]/page.tsx`
+    - 加载文档详情和渲染块
+    - 组合 DocumentReader、标注层、AI 侧边栏
+    - _需求: 7.1_
+  - [ ]* 10.7 编写块渲染器属性测试
+    - **Property 8: 块渲染器类型覆盖**
+    - **验证: 需求 7.2**
+
+- [ ] 11. 检查点 — 文档前端验证
+  - 确保文档列表页、文档阅读页可正常渲染，上传和阅读流程通畅。如有问题请向用户确认。
+
+- [ ] 12. 标注与笔记模块：API 层
+  - [ ] 12.1 实现创建标注 API `app/api/annotations/route.ts` (POST)
+    - 使用 createAnnotationSchema 校验请求体
+    - 创建 document_annotations 记录，包含锚定信息、选中文本、前后缀上下文
+    - 笔记类型时 content 字段必填
+    - _需求: 9.1, 9.2, 9.3, 9.4, 10.2_
+  - [ ] 12.2 实现标注列表 API `app/api/annotations/route.ts` (GET)
+    - 按 documentId 查询当前用户的所有未删除标注和笔记
+    - RLS 确保仅返回当前用户的数据
+    - _需求: 11.1, 12.1, 21.2_
+  - [ ] 12.3 实现更新笔记 API `app/api/annotations/[id]/route.ts` (PATCH)
+    - 使用 updateAnnotationSchema 校验，更新笔记 content
+    - _需求: 11.2_
+  - [ ] 12.4 实现删除标注 API `app/api/annotations/[id]/route.ts` (DELETE)
+    - 软删除：设置 is_deleted = true
+    - _需求: 11.3_
+  - [ ]* 12.5 编写标注 CRUD 属性测试
+    - **Property 11: 标注创建往返**
+    - **Property 12: 标注锚定准确性**
+    - **Property 13: 标注不修改文档**
+    - **Property 14: 标注列表完整性**
+    - **Property 15: 笔记内容更新往返**
+    - **Property 16: 标注软删除**
+    - **验证: 需求 9.1, 9.2, 9.3, 9.4, 9.5, 10.2, 11.1, 11.2, 11.3, 12.1, 12.2**
+
+- [ ] 13. 标注与笔记模块：前端组件
+  - [ ] 13.1 实现高亮渲染层 `components/annotations/HighlightLayer.tsx`
+    - 基于 Pretext 计算的字符位置渲染高亮覆盖层
+    - 支持多种颜色
+    - _需求: 9.1, 9.2, 9.3_
+  - [ ] 13.2 实现下划线渲染层 `components/annotations/UnderlineLayer.tsx`
+    - 基于锚定信息渲染下划线标记
+    - 支持多种颜色
+    - _需求: 9.1, 9.2, 9.3_
+  - [ ] 13.3 实现颜色选择器 `components/annotations/ColorPicker.tsx`
+    - 提供预设颜色选项供用户选择标注颜色
+    - _需求: 9.3_
+  - [ ] 13.4 实现笔记标记与编辑器 `components/annotations/NoteMarker.tsx` 和 `NoteEditor.tsx`
+    - NoteMarker：在文档中显示笔记图标标记
+    - NoteEditor：点击标记后弹出笔记编辑区域，支持输入和保存
+    - _需求: 10.1, 10.2, 10.3, 10.4_
+  - [ ] 13.5 实现标注列表侧边栏 `components/annotations/AnnotationList.tsx`
+    - 展示当前文档的所有标注和笔记
+    - 支持编辑笔记内容和删除标注/笔记
+    - _需求: 11.1, 11.2, 11.3_
+  - [ ] 13.6 将标注层集成到 DocumentReader
+    - 在 DocumentReader 中叠加 HighlightLayer 和 UnderlineLayer
+    - 打开文档时自动加载并渲染已有标注和笔记
+    - 确保标注操作不修改原始文档内容
+    - _需求: 12.1, 12.2, 9.5_
+
+- [ ] 14. 检查点 — 标注与笔记验证
+  - 确保标注创建、渲染、编辑、删除流程完整，阅读痕迹恢复正常。如有问题请向用户确认。
+
+- [ ] 15. AI 模块：API 层
+  - [ ] 15.1 实现向量化服务 `lib/ai/embedding.ts`
+    - 封装 Embedding API 调用，将文本转换为向量
+    - 在文档解析流水线中调用，生成 chunk_embeddings
+    - _需求: 19.1, 19.2_
+  - [ ] 15.2 实现 RAG 上下文构建 `lib/ai/context.ts`
+    - 根据用户问题进行向量检索，获取相关 document_chunks
+    - 构建 LLM 上下文（系统提示 + 文档片段 + 用户问题）
+    - _需求: 13.1, 13.2_
+  - [ ] 15.3 实现 AI 对话 API `app/api/ai/chat/route.ts` (POST)
+    - 使用 chatSchema 校验请求体
+    - 基于 RAG 上下文调用 LLM 生成回答
+    - 支持 conversationId 维持对话上下文，不传则创建新对话
+    - 保存用户消息和 AI 回复到对话历史
+    - 无法回答时返回超出文档范围提示
+    - _需求: 13.1, 13.2, 13.3, 13.4, 15.1, 15.2, 15.3_
+  - [ ] 15.4 实现文档摘要 API `app/api/ai/summarize/route.ts` (POST)
+    - 使用 summarizeSchema 校验，基于文档内容生成结构化摘要
+    - _需求: 14.1, 14.2_
+  - [ ] 15.5 实现内容解释 API `app/api/ai/explain/route.ts` (POST)
+    - 使用 explainSchema 校验，对选中文本进行解读说明
+    - _需求: 17.1_
+  - [ ] 15.6 实现 AI 生成笔记 API `app/api/ai/generate-note/route.ts` (POST)
+    - 使用 generateNoteSchema 校验
+    - 基于文档内容和对话历史生成结构化笔记
+    - _需求: 16.1, 16.2_
+  - [ ] 15.7 实现重点提炼和逻辑梳理 API
+    - `app/api/ai/key-points/route.ts` (POST)：提炼文档关键要点
+    - `app/api/ai/outline/route.ts` (POST)：生成文档逻辑结构概览
+    - _需求: 17.2, 17.3_
+  - [ ] 15.8 实现对话历史 API `app/api/ai/history/route.ts` (GET)
+    - 按 documentId 查询当前用户的对话历史，按时间排序
+    - _需求: 15.4_
+  - [ ]* 15.9 编写 AI 模块属性测试
+    - **Property 17: 新对话清除上下文**
+    - **Property 18: 对话历史持久化**
+    - **Property 19: AI 生成笔记持久化**
+    - **Property 25: AI 对话历史隔离**
+    - **验证: 需求 15.3, 15.4, 16.3, 21.3**
+
+- [ ] 16. AI 模块：前端组件
+  - [ ] 16.1 创建 AI Zustand Store `stores/ai.ts`
+    - 实现 AIState 接口：messages、conversationId、loading
+    - 实现 sendMessage、clearConversation、loadHistory 方法
+    - _需求: 15.1, 15.3, 15.4_
+  - [ ] 16.2 实现 AI 对话面板 `components/ai/AIChatPanel.tsx`
+    - 消息输入框和发送按钮
+    - 消息列表展示（用户消息和 AI 回复）
+    - 加载状态提示
+    - 新对话按钮（清除上下文）
+    - _需求: 13.1, 13.3, 15.1, 15.2, 15.3_
+  - [ ] 16.3 实现对话消息气泡 `components/ai/ChatMessage.tsx`
+    - 区分用户和 AI 消息样式
+    - 支持 Markdown 格式渲染
+    - _需求: 15.1_
+  - [ ] 16.4 实现文档摘要展示 `components/ai/SummaryView.tsx`
+    - 展示结构化摘要内容
+    - 支持重新生成按钮
+    - _需求: 14.1, 14.2, 14.3_
+  - [ ] 16.5 实现 AI 生成笔记预览 `components/ai/AIGeneratedNote.tsx`
+    - 展示 AI 生成的笔记内容供用户确认和编辑
+    - 确认保存后调用标注 API 保存到笔记列表
+    - _需求: 16.1, 16.2, 16.3_
+  - [ ] 16.6 将 AI 侧边栏集成到文档阅读页
+    - 在 documents/[id] 页面添加可折叠的 AI 侧边栏
+    - 包含对话、摘要、重点提炼、逻辑梳理标签页
+    - _需求: 13.1, 14.1, 17.2, 17.3_
+
+- [ ] 17. 检查点 — AI 模块验证
+  - 确保 AI 对话、摘要、解释、笔记生成功能正常，对话历史可查看。如有问题请向用户确认。
+
+- [ ] 18. 搜索模块
+  - [ ] 18.1 实现搜索 API `app/api/search/route.ts` (GET)
+    - 使用 searchSchema 校验查询参数
+    - keyword 模式：使用 PostgreSQL tsvector 全文检索 document_chunks
+    - semantic 模式：将查询文本向量化，使用 pgvector 近似搜索 chunk_embeddings
+    - hybrid 模式：合并两种搜索结果，按综合相关度排序
+    - 返回结果包含 documentId、documentTitle、snippet、highlightedSnippet、pageNo、score
+    - RLS 确保仅搜索用户自己的文档（及 shared 文档）
+    - _需求: 18.1, 18.2, 18.3, 18.4, 19.1, 19.2, 20.1_
+  - [ ] 18.2 创建搜索 Zustand Store `stores/search.ts`
+    - 实现 SearchState 接口：query、results、loading
+    - 实现 search 方法
+    - _需求: 18.1_
+  - [ ] 18.3 实现搜索输入组件 `components/search/SearchInput.tsx`
+    - 搜索输入框，支持回车和按钮提交
+    - _需求: 18.1_
+  - [ ] 18.4 实现搜索结果组件 `components/search/SearchResults.tsx` 和 `SearchResultItem.tsx`
+    - SearchResults：搜索结果列表，无结果时显示提示
+    - SearchResultItem：展示文档标题、高亮匹配片段、页码
+    - 点击结果跳转到对应文档的对应位置
+    - _需求: 18.3, 18.4, 20.1, 20.2_
+  - [ ] 18.5 实现搜索页面 `app/(main)/search/page.tsx`
+    - 组合 SearchInput 和 SearchResults
+    - 连接 search store
+    - _需求: 18.1_
+  - [ ]* 18.6 编写搜索模块属性测试
+    - **Property 20: 关键词搜索覆盖**
+    - **Property 21: 搜索结果排序与高亮**
+    - **Property 22: 语义搜索相关性**
+    - **Property 23: 搜索结果定位信息**
+    - **验证: 需求 18.1, 18.2, 18.3, 19.1, 20.1**
+
+- [ ] 19. 仪表盘与笔记管理页面
+  - [ ] 19.1 实现仪表盘页面 `app/(main)/home/page.tsx`
+    - 展示文档统计（总数、各状态数量）
+    - 展示最近上传的文档列表
+    - 提供快捷操作入口（上传文档、搜索）
+    - _需求: 6.1_
+  - [ ] 19.2 实现笔记管理页面 `app/(main)/notes/page.tsx`
+    - 跨文档汇总当前用户的所有笔记
+    - 支持按文档筛选
+    - 支持编辑和删除笔记
+    - 点击笔记跳转到对应文档位置
+    - _需求: 11.1, 11.2, 11.3_
+
+- [ ] 20. 安全与认证保护
+  - [ ] 20.1 实现 API 路由认证中间件
+    - 所有受保护的 API 路由统一校验 Supabase session
+    - 未认证请求返回 401 响应
+    - 确保 RLS 策略在所有表上正确启用
+    - _需求: 21.4, 21.5_
+  - [ ] 20.2 确保前端未登录重定向
+    - 验证 middleware.ts 对 (main) 路由组的 session 检查
+    - 未登录用户访问受保护页面时重定向到登录页
+    - _需求: 3.3, 21.5_
+  - [ ]* 20.3 编写安全属性测试
+    - **Property 1: 注册输入校验**
+    - **Property 27: 未认证访问拒绝**
+    - **验证: 需求 1.1, 1.2, 21.4, 21.5**
+
+- [ ] 21. 最终检查点 — 全功能集成验证
+  - 确保所有模块功能正常，跨模块交互（如搜索结果跳转到文档阅读、AI 生成笔记保存到标注列表）流程通畅。如有问题请向用户确认。
+
+## 备注
+
+- 标记 `*` 的任务为可选任务，可跳过以加速 MVP 开发
+- 每个任务引用了具体的需求编号，确保需求可追溯
+- 检查点任务用于阶段性验证，确保增量开发的正确性
+- 属性测试验证设计文档中的正确性属性（Property 1-27）
+- 单元测试验证具体示例和边界条件
+- 已有功能（用户注册、登录、邮箱验证、UserProvider、User Store、HTTP 客户端、handler/success/error）不在任务列表中重复
