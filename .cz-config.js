@@ -3,9 +3,9 @@ module.exports = {
       { value: '✨ feat',     name: '  ✨  feat: 新功能' },
       { value: '🐛 fix',      name: '  🐛  fix: 修复bug' },
       { value: '🎉 init',     name: '  🎉  init: 初始化' },
-      { value: '📗 docs',     name: '  📗  docs: 文档变更' },
+      { value: '✏️ docs',     name: '  ✏️  docs: 文档变更' },
       { value: '🌈 style',    name: '  🌈  style: 更改样式' },
-      { value: '🍀 refactor', name: '  🍀  refactor: 重构' },
+      { value: '♻️ refactor', name: '  ♻️  refactor: 重构' },
       { value: '🔥 perf',     name: '  🔥  perf: 性能优化' },
       { value: '✅ test',     name: '  ✅  test: 测试' },
       { value: '⏪️ revert',   name: '  ⏪️  revert: 回退' },
@@ -17,7 +17,9 @@ module.exports = {
   scopes: [
     { name: 'components' },
     { name: 'packages' },
+    { name: 'pages' },
     { name: 'style' },
+    { name: 'config' },
     { name: 'api' },
     { name: 'custom' }
   ],
