@@ -81,34 +81,34 @@ sequenceDiagram
     U->>FE: 选择文件上传
     FE->>API: POST /api/documents/upload (FormData)
     API->>S3: 上传原始文件到 document-originals 桶
-    API->>DB: 创建文档记录 (status=uploading)
+    API->>DB: 创建文档记录 (status=processing)
     API->>EF1: 触发 parse-document（异步，不等待）
-    API-->>FE: 立即返回文档ID + status=uploading
+    API-->>FE: 立即返回文档ID + status=processing
 
     Note over EF1,DB: parse-document 执行
-    EF1->>DB: 更新状态: parsing
+    EF1->>DB: 更新 parse_status: running
     EF1->>S3: 从 document-originals 生成临时签名URL
     EF1->>LP: 提交解析任务
     LP-->>EF1: 返回 Markdown + 图片列表
-    EF1->>DB: 更新状态: processing_images
+    EF1->>DB: 更新 parse_status: processing_images
     EF1->>S3: 转存图片到 document-assets-public 桶
     EF1->>DB: 保存标准化 Markdown
     EF1->>EF2: 链式触发 vectorize-document
 
     Note over EF2,DB: vectorize-document 执行
-    EF2->>DB: 更新状态: vectorizing
+    EF2->>DB: 更新 vector_status: running
     EF2->>DB: 读取 Markdown → 清洗 → 分片 → 向量化 → 写入 chunks
-    EF2->>DB: 更新状态: generating_ai
+    EF2->>DB: 更新 vector_status: success
     par 并行触发 AI 生成
         EF2->>EF3: 触发 generate-summary
         EF2->>EF4: 触发 generate-mindmap
     end
 
     Note over EF3,EF4: AI 生成并行执行
-    EF3->>DB: 保存 ai_summary
-    EF4->>DB: 保存 mindmap_data
-    EF3->>DB: 检查两者均完成后更新状态: parsed
-    EF4->>DB: 检查两者均完成后更新状态: parsed
+    EF3->>DB: 保存 summary, 更新 summary_status: success
+    EF4->>DB: 保存 mindmap, 更新 mindmap_status: success
+    EF3->>DB: 检查两者均 success 后更新 status: ready
+    EF4->>DB: 检查两者均 success 后更新 status: ready
 
     Note over FE,DB: 前端轮询状态
     FE->>API: 轮询 GET /api/documents/:id/status
@@ -123,35 +123,35 @@ sequenceDiagram
 ### 前端组件层级
 
 ```
-app/(main)/documents/
-├── page.tsx                          # 文档管理主页面
-├── components/
-│   ├── DocumentGrid.tsx              # 文档卡片网格容器
-│   ├── DocumentCard.tsx              # 单个文档卡片
-│   ├── PaginationController.tsx      # 分页控件
-│   ├── SearchBar.tsx                 # 搜索输入框
-│   ├── UploadDialog.tsx              # 上传对话框（拖拽+选择）
-│   ├── UploadProgress.tsx            # 上传进度指示器
-│   ├── SidePanel/
-│   │   ├── SidePanel.tsx             # 左侧悬浮卡片容器
-│   │   ├── TagManager.tsx            # 标签管理面板
-│   │   ├── UserPanel.tsx             # 用户操作面板
-│   │   └── TagFilterList.tsx         # 标签筛选列表
-│   └── EmptyState.tsx                # 空状态组件
+components/
+├── documents/                        # 文档列表页组件
+│   ├── DocumentGrid.tsx
+│   ├── DocumentCard.tsx
+│   ├── PaginationController.tsx
+│   ├── SearchBar.tsx
+│   ├── UploadDialog.tsx
+│   ├── UploadProgress.tsx
+│   ├── EmptyState.tsx
+│   └── side-panel/
+│       ├── SidePanel.tsx
+│       ├── TagManager.tsx
+│       ├── UserPanel.tsx
+│       └── TagFilterList.tsx
+├── document-detail/                  # 文档详情页组件
+│   ├── TemplateRenderer.tsx
+│   ├── TemplateSwitcher.tsx
+│   ├── DocumentOutline.tsx
+│   ├── DocumentMeta.tsx
+│   ├── AIChatPanel.tsx               # 仅 UI，不实现后端
+│   ├── ChatMessage.tsx
+│   ├── MindmapViewer.tsx
+│   ├── SummaryCard.tsx
+│   └── DownloadButton.tsx
 
-app/(main)/documents/[id]/
-├── page.tsx                          # 文档详情页
-├── components/
-│   ├── DocumentViewer.tsx            # 文档正文渲染容器
-│   ├── TemplateRenderer.tsx          # 模板化 Markdown 渲染器
-│   ├── TemplateSwitcher.tsx          # 模板切换器
-│   ├── DocumentOutline.tsx           # 文档大纲
-│   ├── DocumentMeta.tsx              # 文档元信息
-│   ├── AIChatPanel.tsx               # AI 问答面板
-│   ├── ChatMessage.tsx               # 对话气泡
-│   ├── MindmapViewer.tsx             # 思维导图展示
-│   ├── SummaryCard.tsx               # AI 总结卡片
-│   └── DownloadButton.tsx            # 下载按钮
+app/(main)/documents/
+├── page.tsx                          # 文档管理主页面（组装 components/documents/*）
+└── [id]/
+    └── page.tsx                      # 文档详情页（组装 components/document-detail/*）
 ```
 
 ### API 模块接口
@@ -246,9 +246,13 @@ interface DocumentDetailState {
   error: string | null
   template: TemplateType
   panelVisible: boolean          // AI 面板展开/收起状态（仅 UI）
+  summaryStatus: ProcessingStatus | null  // 重新生成时的状态轮询
+  mindmapStatus: ProcessingStatus | null  // 重新生成时的状态轮询
   setTemplate: (template: TemplateType) => void
   fetchDocument: (id: string) => Promise<void>
   togglePanel: () => void
+  regenerateSummary: () => Promise<void>   // 触发后轮询 status 直到 success/failed
+  regenerateMindmap: () => Promise<void>   // 触发后轮询 status 直到 success/failed
 }
 ```
 
@@ -298,7 +302,7 @@ interface DocumentDetailState {
 | file_size | bigint | 文件大小（字节） |
 | original_bucket | text (default 'document-originals') | 原始文件存储桶 |
 | original_storage_path | text | 原始文件存储路径 |
-| status | text (default 'uploaded') | 整体状态：uploaded/parsing/parsed/vectorizing/ready/failed |
+| status | text (default 'uploaded') | 整体状态：processing/ready/failed |
 | parse_status | text (default 'pending') | 解析状态：pending/running/success/failed |
 | vector_status | text (default 'pending') | 向量化状态 |
 | summary_status | text (default 'pending') | AI 总结状态 |
@@ -481,16 +485,18 @@ erDiagram
 |----|------|------|
 | profiles | SELECT/UPDATE | `auth.uid() = id` |
 | user_settings | SELECT/INSERT/UPDATE | `auth.uid() = user_id` |
-| documents | SELECT/INSERT/UPDATE/DELETE | `auth.uid() = user_id AND deleted = 0` |
+| documents | SELECT/INSERT/UPDATE/DELETE | `auth.uid() = user_id` |
 | document_contents | SELECT/INSERT/UPDATE | `auth.uid() = user_id` |
 | document_assets | SELECT/INSERT | `auth.uid() = user_id` |
-| tags | SELECT/INSERT/UPDATE/DELETE | `auth.uid() = user_id AND deleted = 0` |
+| tags | SELECT/INSERT/UPDATE/DELETE | `auth.uid() = user_id` |
 | document_tags | SELECT/INSERT/DELETE | `auth.uid() = user_id` |
 | document_chunks | SELECT/INSERT/DELETE | `auth.uid() = user_id` |
 | document_summaries | SELECT/INSERT/UPDATE | `auth.uid() = user_id` |
 | document_mindmaps | SELECT/INSERT/UPDATE | `auth.uid() = user_id` |
 | document_qa_records | SELECT/INSERT | `auth.uid() = user_id` |
 | document_processing_jobs | SELECT/INSERT/UPDATE | `auth.uid() = user_id` |
+
+> **RLS 设计原则**：RLS 主要负责用户数据隔离。`deleted=0` 的过滤在业务查询和 RPC 中处理，不在 RLS 策略中加入，避免影响后续恢复、清理和后台维护逻辑。
 
 **Storage Policy：**
 
@@ -518,7 +524,7 @@ erDiagram
 
 ```typescript
 // types/document.ts
-export type DocumentStatus = 'uploaded' | 'parsing' | 'parsed' | 'vectorizing' | 'ready' | 'failed'
+export type DocumentStatus = 'processing' | 'ready' | 'failed'
 export type ProcessingStatus = 'pending' | 'running' | 'success' | 'failed'
 
 export interface Document {
@@ -650,9 +656,9 @@ export interface SearchParams {
 export interface SearchResult {
   documentId: string
   title: string
-  snippet: string
-  tags: Tag[]
+  matchedContent: string
   score: number
+  matchType: 'keyword' | 'vector' | 'hybrid'
 }
 
 // types/ai.ts (扩展)
@@ -669,10 +675,10 @@ export type TemplateType = 'default' | 'academic' | 'clean' | 'card'
 
 | Edge Function | 职责 | 触发方式 |
 |---------------|------|----------|
-| `parse-document` | 文档解析主链路：读取原始文件 → LlamaParse → 图片转存 → Markdown 标准化 | Route Handler 调用 |
-| `vectorize-document` | 文本清洗、分片、向量化，写入 document_chunks | parse-document 完成后由 Route Handler 调用 |
-| `generate-summary` | 基于标准化 Markdown 生成 AI 总结 | vectorize-document 完成后调用 / 用户手动重新生成 |
-| `generate-mindmap` | 基于标题结构和正文语义生成思维导图 JSON | vectorize-document 完成后调用 / 用户手动重新生成 |
+| `parse-document` | 文档解析主链路：读取原始文件 → LlamaParse → 图片转存 → Markdown 标准化 | Upload Route Handler 异步触发 |
+| `vectorize-document` | 文本清洗、分片、向量化，写入 document_chunks | parse-document 链式触发 |
+| `generate-summary` | 基于标准化 Markdown 生成 AI 总结 | vectorize-document 链式触发 / 用户手动重新生成 |
+| `generate-mindmap` | 基于标题结构和正文语义生成思维导图 JSON | vectorize-document 链式触发 / 用户手动重新生成 |
 
 ### parse-document Edge Function
 
@@ -691,14 +697,14 @@ flowchart TD
     I --> J[遍历图片列表，逐一下载]
     J --> K{下载成功?}
     K -->|是| L[上传到 document-assets-public 桶]
-    K -->|否| M[记录占位标记: ![图片加载失败]()]
+    K -->|否| M[保留原始 alt 文本或插入文字提示"[图片暂时无法显示]"]
     L --> N[获取 Supabase 公网图片 URL]
     N --> O[替换 Markdown 中对应的临时图片地址]
     M --> O
     O --> P{所有图片处理完?}
     P -->|否| J
-    P -->|是| Q[保存标准化 Markdown 到 documents.content]
-    Q --> R[更新状态: vectorizing]
+    P -->|是| Q[保存标准化 Markdown 到 document_contents 表]
+    Q --> R[更新 parse_status: success]
     R --> S[链式调用 vectorize-document Edge Function]
 ```
 
@@ -711,12 +717,12 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[接收请求: documentId, userId] --> B[从 DB 读取 documents.content]
+    A[接收请求: documentId, userId] --> B[从 document_contents 读取标准化 Markdown]
     B --> C[文本清洗：移除图片标记、HTML 标签、多余空白]
     C --> D[按段落边界优先分片：最大 1000 字符/片，重叠 200 字符]
     D --> E[批量调用 Embedding API 生成向量]
     E --> F[批量写入 document_chunks 表]
-    F --> G[更新文档状态: generating_ai]
+    F --> G[更新 vector_status: success]
     G --> H[并行触发 generate-summary 和 generate-mindmap]
     H --> I[返回成功]
 ```
@@ -730,7 +736,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[接收请求: documentId] --> B[从 DB 读取 documents.content]
+    A[接收请求: documentId] --> B[从 document_contents 读取标准化 Markdown]
     B --> C{内容长度 >= 50 字?}
     C -->|否| D[返回: 内容过短无法生成]
     C -->|是| E[构造 Prompt：提取不超过 5 条要点 + 200 字摘要]
@@ -738,7 +744,7 @@ flowchart TD
     F --> G{生成成功?}
     G -->|否| H[返回错误信息]
     G -->|是| I[解析 LLM 返回为 { keyPoints: string[], abstract: string }]
-    I --> J[保存到 documents.ai_summary]
+    I --> J[保存到 document_summaries 表]
     J --> K[返回成功]
 ```
 
@@ -751,7 +757,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[接收请求: documentId] --> B[从 DB 读取 documents.content]
+    A[接收请求: documentId] --> B[从 document_contents 读取标准化 Markdown]
     B --> C{内容长度 >= 50 字?}
     C -->|否| D[返回: 内容过短无法生成]
     C -->|是| E[提取 Markdown 标题层级结构（h1-h6）]
@@ -760,7 +766,7 @@ flowchart TD
     G --> H{生成成功?}
     H -->|否| I[返回错误信息]
     H -->|是| J[校验 JSON 结构合法性]
-    J --> K[保存到 documents.mindmap_data]
+    J --> K[保存到 document_mindmaps 表]
     K --> L[返回成功]
 ```
 
@@ -782,9 +788,9 @@ sequenceDiagram
 
     FE->>API: POST /api/documents/upload
     API->>S3: 上传原始文件
-    API->>DB: 创建文档记录 (status=uploading)
+    API->>DB: 创建文档记录 (status=processing)
     API->>EF1: 异步触发 parse-document（不等待）
-    API-->>FE: 立即返回 documentId + status=uploading
+    API-->>FE: 立即返回 documentId + status=processing
 
     Note over EF1: parse-document 独立执行
     EF1->>DB: 更新 status=parsing
@@ -814,7 +820,7 @@ sequenceDiagram
 
 - **Route Handler 职责最小化**：upload 接口只负责上传文件、创建记录、异步触发 `parse-document`，然后立即返回，不等待任何后续处理
 - **Edge Function 链式触发**：每个 Edge Function 完成后主动调用下一个，形成 `parse-document → vectorize-document → (generate-summary ∥ generate-mindmap)` 的链路
-- **状态最终一致**：`generate-summary` 和 `generate-mindmap` 并行执行，两者均完成后将文档状态更新为 `parsed`（通过数据库条件更新实现：仅当 ai_summary 和 mindmap_data 均非空时才设置 status=parsed）
+- **状态最终一致**：`generate-summary` 和 `generate-mindmap` 并行执行，两者均完成后将文档状态更新为 `ready`（通过数据库条件更新实现：仅当 summary_status 和 mindmap_status 均为 success 时才设置 status=ready）
 - **失败隔离**：任一 Edge Function 失败只影响当前步骤，不回滚前序步骤的结果；失败时将 status 标记为 `failed` 并记录错误信息
 
 ### 关键实现细节
@@ -822,11 +828,11 @@ sequenceDiagram
 1. **临时 URL 有效期**：1 小时，足够 LlamaParse 完成解析
 2. **超时控制**：每个 Edge Function 独立超时，parse-document 5 分钟，其余 2 分钟
 3. **分片策略**：最大 1000 字符/片，相邻片段重叠 200 字符，按段落边界优先切分
-4. **图片失败处理**：替换为 `![图片加载失败]()`，不中断流程
+4. **图片失败处理**：保留原始 alt 文本或插入文字提示"[图片暂时无法显示]"，不生成空图片链接，不中断流程
 5. **状态轮询**：前端每 3 秒轮询 `/api/documents/:id/status`
 6. **链式触发**：Edge Function 之间通过 Supabase Edge Function invoke 互相调用，不经过 Route Handler 中转
 7. **幂等性**：每个 Edge Function 支持重复调用（先清除旧数据再写入），便于失败重试
-8. **并行完成检测**：generate-summary 和 generate-mindmap 各自完成后检查对方是否也已完成，最后一个完成的负责将 status 更新为 parsed
+8. **并行完成检测**：generate-summary 和 generate-mindmap 各自完成后检查对方是否也已 success，最后一个完成的负责将 documents.status 更新为 ready
 
 ---
 
@@ -834,73 +840,88 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    A[用户查询] --> B[关键词搜索]
-    A --> C[向量语义搜索]
-    B --> D[PostgreSQL FTS]
-    C --> E[生成查询向量]
-    E --> F[pgvector 余弦相似度]
-    D --> G[结果融合]
-    F --> G
-    G --> H[加权排序: 0.4*keyword + 0.6*vector]
-    H --> I[返回 Top 50]
+    A[用户查询] --> B[Route Handler 生成 query_embedding]
+    B --> C[调用 hybrid_search RPC]
+    C --> D[关键词搜索: documents.title + document_contents]
+    C --> E[向量搜索: document_chunks.embedding]
+    D --> F[结果融合]
+    E --> F
+    F --> G[加权排序: 0.4*keyword + 0.6*vector]
+    G --> H[返回 Top N（默认20，最大50）]
 ```
 
-### 搜索 SQL 示例
+### hybrid_search RPC 函数签名
 
 ```sql
--- 混合搜索函数
+-- 混合搜索函数（标签不参与搜索，仅用于筛选）
 CREATE OR REPLACE FUNCTION hybrid_search(
   query_text TEXT,
-  query_embedding vector(1536),
-  match_count INT DEFAULT 50,
-  keyword_weight FLOAT DEFAULT 0.4,
-  vector_weight FLOAT DEFAULT 0.6,
-  current_user_id UUID DEFAULT auth.uid()
+  query_embedding vector,           -- 维度必须与 document_chunks.embedding 一致
+  match_count INT DEFAULT 20        -- 最大限制 50
 )
 RETURNS TABLE (
   document_id UUID,
-  title VARCHAR,
-  snippet TEXT,
-  score FLOAT
+  title TEXT,
+  matched_content TEXT,
+  score FLOAT,
+  match_type TEXT                    -- 'keyword' | 'vector' | 'hybrid'
 ) AS $$
 BEGIN
+  -- 内部限制 match_count 最大为 50
+  match_count := LEAST(match_count, 50);
+
   RETURN QUERY
   WITH keyword_results AS (
     SELECT d.id, d.title,
-      ts_headline('chinese', d.content, plainto_tsquery('chinese', query_text),
-        'MaxWords=30, MinWords=15, StartSel=<mark>, StopSel=</mark>') AS snippet,
-      ts_rank(d.fts, plainto_tsquery('chinese', query_text)) AS rank
+      ts_headline('simple', dc.markdown_content, plainto_tsquery('simple', query_text),
+        'MaxWords=30, MinWords=15, StartSel=<mark>, StopSel=</mark>') AS matched_content,
+      ts_rank_cd(to_tsvector('simple', d.title || ' ' || dc.markdown_content),
+        plainto_tsquery('simple', query_text)) AS rank,
+      'keyword'::TEXT AS match_type
     FROM documents d
-    WHERE d.user_id = current_user_id
-      AND d.fts @@ plainto_tsquery('chinese', query_text)
-      AND d.status = 'parsed'
+    JOIN document_contents dc ON dc.document_id = d.id AND dc.deleted = 0
+    WHERE d.user_id = auth.uid()
+      AND d.deleted = 0
+      AND d.status = 'ready'
+      AND to_tsvector('simple', d.title || ' ' || dc.markdown_content)
+        @@ plainto_tsquery('simple', query_text)
   ),
   vector_results AS (
-    SELECT dc.document_id AS id, d.title,
-      dc.content AS snippet,
-      1 - (dc.embedding <=> query_embedding) AS rank
-    FROM document_chunks dc
-    JOIN documents d ON d.id = dc.document_id
-    WHERE dc.user_id = current_user_id
-      AND d.status = 'parsed'
-    ORDER BY dc.embedding <=> query_embedding
+    SELECT ch.document_id AS id, d.title,
+      ch.content AS matched_content,
+      1 - (ch.embedding <=> query_embedding) AS rank,
+      'vector'::TEXT AS match_type
+    FROM document_chunks ch
+    JOIN documents d ON d.id = ch.document_id
+    WHERE ch.user_id = auth.uid()
+      AND ch.deleted = 0
+      AND d.deleted = 0
+      AND d.status = 'ready'
+    ORDER BY ch.embedding <=> query_embedding
     LIMIT match_count
   ),
   combined AS (
     SELECT COALESCE(k.id, v.id) AS id,
       COALESCE(k.title, v.title) AS title,
-      COALESCE(k.snippet, v.snippet) AS snippet,
-      (COALESCE(k.rank, 0) * keyword_weight + COALESCE(v.rank, 0) * vector_weight) AS score
+      COALESCE(k.matched_content, v.matched_content) AS matched_content,
+      (COALESCE(k.rank, 0) * 0.4 + COALESCE(v.rank, 0) * 0.6) AS score,
+      CASE
+        WHEN k.id IS NOT NULL AND v.id IS NOT NULL THEN 'hybrid'
+        WHEN k.id IS NOT NULL THEN 'keyword'
+        ELSE 'vector'
+      END AS match_type
     FROM keyword_results k
     FULL OUTER JOIN vector_results v ON k.id = v.id
   )
-  SELECT c.id AS document_id, c.title, c.snippet, c.score
+  SELECT c.id AS document_id, c.title, c.matched_content, c.score, c.match_type
   FROM combined c
   ORDER BY c.score DESC
   LIMIT match_count;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
+
+> **说明**：Route Handler `/api/search/route.ts` 负责生成 query_embedding（调用 Embedding API），然后调用此 RPC。标签不参与搜索，仅通过左侧面板筛选。
 
 ---
 
@@ -911,33 +932,9 @@ apps/noter-web/
 ├── app/
 │   ├── (main)/
 │   │   └── documents/
-│   │       ├── page.tsx
-│   │       ├── [id]/
-│   │       │   └── page.tsx
-│   │       └── components/          # 新增
-│   │           ├── DocumentGrid.tsx
-│   │           ├── DocumentCard.tsx
-│   │           ├── PaginationController.tsx
-│   │           ├── SearchBar.tsx
-│   │           ├── UploadDialog.tsx
-│   │           ├── UploadProgress.tsx
-│   │           ├── EmptyState.tsx
-│   │           ├── SidePanel/
-│   │           │   ├── SidePanel.tsx
-│   │           │   ├── TagManager.tsx
-│   │           │   ├── UserPanel.tsx
-│   │           │   └── TagFilterList.tsx
-│   │           └── detail/
-│   │               ├── DocumentViewer.tsx
-│   │               ├── TemplateRenderer.tsx
-│   │               ├── TemplateSwitcher.tsx
-│   │               ├── DocumentOutline.tsx
-│   │               ├── DocumentMeta.tsx
-│   │               ├── AIChatPanel.tsx
-│   │               ├── ChatMessage.tsx
-│   │               ├── MindmapViewer.tsx
-│   │               ├── SummaryCard.tsx
-│   │               └── DownloadButton.tsx
+│   │       ├── page.tsx              # 文档管理主页面
+│   │       └── [id]/
+│   │           └── page.tsx          # 文档详情页
 │   └── api/
 │       ├── documents/
 │       │   ├── route.ts              # GET 列表
@@ -948,7 +945,7 @@ apps/noter-web/
 │       │       ├── status/
 │       │       │   └── route.ts      # GET 状态查询
 │       │       ├── download-pdf/
-│       │       │   └── route.ts      # GET PDF 下载
+│       │       │   └── route.ts      # GET PDF 下载（仅支持 PDF 导出）
 │       │       └── tags/
 │       │           ├── route.ts      # POST 添加标签
 │       │           └── [tagId]/
@@ -958,7 +955,7 @@ apps/noter-web/
 │       │   └── [id]/
 │       │       └── route.ts          # DELETE 删除
 │       ├── search/
-│       │   └── route.ts              # GET 混合搜索
+│       │   └── route.ts              # GET 混合搜索（生成 embedding → 调用 hybrid_search RPC）
 │       └── ai/
 │           ├── chat/
 │           │   └── stream/
@@ -969,6 +966,30 @@ apps/noter-web/
 │           │   └── route.ts          # POST 重新生成总结
 │           └── regenerate-mindmap/
 │               └── route.ts          # POST 重新生成思维导图
+├── components/
+│   ├── documents/                    # 文档列表页组件
+│   │   ├── DocumentGrid.tsx
+│   │   ├── DocumentCard.tsx
+│   │   ├── PaginationController.tsx
+│   │   ├── SearchBar.tsx
+│   │   ├── UploadDialog.tsx
+│   │   ├── UploadProgress.tsx
+│   │   ├── EmptyState.tsx
+│   │   └── side-panel/
+│   │       ├── SidePanel.tsx
+│   │       ├── TagManager.tsx
+│   │       ├── UserPanel.tsx
+│   │       └── TagFilterList.tsx
+│   └── document-detail/              # 文档详情页组件
+│       ├── TemplateRenderer.tsx
+│       ├── TemplateSwitcher.tsx
+│       ├── DocumentOutline.tsx
+│       ├── DocumentMeta.tsx
+│       ├── AIChatPanel.tsx           # 仅 UI，不实现后端
+│       ├── ChatMessage.tsx
+│       ├── MindmapViewer.tsx
+│       ├── SummaryCard.tsx
+│       └── DownloadButton.tsx
 ├── lib/axios/
 │   ├── documents.ts                  # 扩展
 │   ├── tags.ts                       # 新增
@@ -982,7 +1003,7 @@ apps/noter-web/
 │   ├── document.ts                   # 新增
 │   ├── search.ts                     # 扩展
 │   └── ai.ts                         # 扩展
-└── utils/noterFetch/feature/
+└── utils/feature/
     ├── documents/
     │   └── schemas.ts                # 新增
     ├── tags/
@@ -994,7 +1015,7 @@ apps/noter-web/
 
 supabase/functions/
 ├── parse-document/
-│   └── index.ts                      # 文档解析主链路：LlamaParse + 图片转存 + Markdown 标准化
+│   └── index.ts                      # 文档解析主链路
 ├── vectorize-document/
 │   └── index.ts                      # 文本清洗、分片、向量化
 ├── generate-summary/
@@ -1035,7 +1056,7 @@ supabase/functions/
 
 ### Property 5: 搜索范围覆盖
 
-*For any* 文档，若其标题、正文或标签中包含某唯一关键词，则搜索该关键词时该文档应出现在结果中。
+*For any* 文档，若其标题或正文中包含某唯一关键词，则搜索该关键词时该文档应出现在结果中。标签不参与搜索。
 
 **Validates: Requirements 2.3**
 
@@ -1155,7 +1176,7 @@ supabase/functions/
 
 ### Property 25: 部分图片失败处理
 
-*For any* 图片列表中存在下载失败的图片，最终 Markdown 中失败图片应被替换为占位标记 `![图片加载失败]()`，成功图片应有有效的 Supabase Storage URL。
+*For any* 图片列表中存在下载失败的图片，最终 Markdown 中失败图片应保留原始 alt 文本或替换为文字提示"[图片暂时无法显示]"，成功图片应有有效的 Supabase Storage URL。
 
 **Validates: Requirements 11.14**
 
