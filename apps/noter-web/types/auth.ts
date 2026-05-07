@@ -45,3 +45,12 @@ export interface EmailConfirmParams {
   type: string
   token_hash: string
 }
+
+export interface UpdateProfileParams {
+  username?: string
+  avatarUrl?: string | null
+}
+
+export interface GithubOAuthResult {
+  url: string
+}

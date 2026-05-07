@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { handler } from '@/utils/http/handler'
 import { success, error } from '@/utils/http/response'
 
-export const GET = handler(async () => {
+export const POST = handler(async () => {
   const supabase = await createClient()
 
   const {
@@ -13,13 +13,11 @@ export const GET = handler(async () => {
     return error('未登录', 401)
   }
 
-  return success(
-    {
-      id: user.id,
-      email: user.email ?? '',
-      username: user.user_metadata.username ?? '',
-      avatarUrl: user.user_metadata.avatar_url ?? null
-    },
-    '获取用户信息成功'
-  )
+  const { error: signOutError } = await supabase.auth.signOut()
+
+  if (signOutError) {
+    return error(signOutError.message, 500)
+  }
+
+  return success(null, '退出登录成功')
 })

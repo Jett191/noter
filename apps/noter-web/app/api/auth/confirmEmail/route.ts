@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
-import { handler } from '@/utils/noterFetch/http/handler'
-import { emailConfirmSchema } from '@/utils/noterFetch/feature/auth/schmas'
+import { handler } from '@/utils/http/handler'
+import { emailConfirmSchema } from '@/utils/feature/auth/schmas'
 import { EmailOtpType } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
