@@ -90,7 +90,7 @@ sequenceDiagram
     EF1->>S3: 从 document-originals 生成临时签名URL
     EF1->>LP: 提交解析任务
     LP-->>EF1: 返回 Markdown + 图片列表
-    EF1->>DB: 更新 parse_status: processing_images
+    EF1->>DB: 更新 parse_status: running
     EF1->>S3: 转存图片到 document-assets-public 桶
     EF1->>DB: 保存标准化 Markdown
     EF1->>EF2: 链式触发 vectorize-document
@@ -302,7 +302,7 @@ interface DocumentDetailState {
 | file_size | bigint | 文件大小（字节） |
 | original_bucket | text (default 'document-originals') | 原始文件存储桶 |
 | original_storage_path | text | 原始文件存储路径 |
-| status | text (default 'uploaded') | 整体状态：processing/ready/failed |
+| status | text (default 'processing') | 整体状态：processing/ready/failed |
 | parse_status | text (default 'pending') | 解析状态：pending/running/success/failed |
 | vector_status | text (default 'pending') | 向量化状态 |
 | summary_status | text (default 'pending') | AI 总结状态 |
@@ -688,13 +688,12 @@ export type TemplateType = 'default' | 'academic' | 'clean' | 'card'
 flowchart TD
     A[接收请求: documentId, userId] --> B[从 document-originals 桶读取原始文件路径]
     B --> C[生成临时签名 URL（有效期 1 小时）]
-    C --> D[更新文档状态: parsing]
+    C --> D[更新 parse_status: running]
     D --> E[调用 LlamaParse API（agentic tier, expand: markdown_full + images_content_metadata）]
     E --> F{解析成功?}
-    F -->|否| G[更新状态: failed, 记录错误信息]
+    F -->|否| G[更新 parse_status: failed, documents.status: failed, 记录错误信息]
     F -->|是| H[获取 Markdown 全文 + 图片 presigned URL 列表]
-    H --> I[更新状态: processing_images]
-    I --> J[遍历图片列表，逐一下载]
+    H --> I[遍历图片列表，逐一下载]
     J --> K{下载成功?}
     K -->|是| L[上传到 document-assets-public 桶]
     K -->|否| M[保留原始 alt 文本或插入文字提示"[图片暂时无法显示]"]
@@ -793,23 +792,24 @@ sequenceDiagram
     API-->>FE: 立即返回 documentId + status=processing
 
     Note over EF1: parse-document 独立执行
-    EF1->>DB: 更新 status=parsing
+    EF1->>DB: 更新 parse_status=running
     EF1->>EF1: LlamaParse 解析 + 图片转存 + Markdown 标准化
-    EF1->>DB: 保存标准化 Markdown, 更新 status=vectorizing
+    EF1->>DB: 保存标准化 Markdown, 更新 parse_status=success
     EF1->>EF2: 链式触发 vectorize-document
 
     Note over EF2: vectorize-document 独立执行
+    EF2->>DB: 更新 vector_status=running
     EF2->>DB: 读取 Markdown → 分片 → 向量化 → 写入 chunks
-    EF2->>DB: 更新 status=generating_ai
+    EF2->>DB: 更新 vector_status=success
     par 并行触发
         EF2->>EF3: 触发 generate-summary
         EF2->>EF4: 触发 generate-mindmap
     end
 
     Note over EF3,EF4: 并行执行 AI 生成
-    EF3->>DB: 保存 ai_summary
-    EF4->>DB: 保存 mindmap_data
-    Note over DB: 两者均完成后更新 status=parsed
+    EF3->>DB: 更新 summary_status=running → 生成 → 保存 → summary_status=success
+    EF4->>DB: 更新 mindmap_status=running → 生成 → 保存 → mindmap_status=success
+    Note over DB: 两者均 success 后更新 status=ready
 
     FE->>API: 轮询 GET /api/documents/:id/status
     API->>DB: 查询 status

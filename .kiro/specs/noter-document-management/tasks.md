@@ -202,8 +202,8 @@
 
   - [ ] 6.7 实现混合搜索 Route Handler `app/api/search/route.ts`
     - 依赖：hybrid_search RPC 已创建（Task 2.2 完成后）
-    - GET 方法：生成 query embedding → 调用 hybrid_search RPC → 返回结果
-    - Route Handler 负责生成 query embedding，RPC 负责搜索逻辑
+    - GET 方法：使用 fetch 调用 Embedding API 生成 query_embedding → 调用 hybrid_search RPC → 返回结果
+    - Route Handler 负责生成 query embedding（直接 fetch，不使用 openai 包），RPC 负责搜索逻辑
     - _Requirements: 2.2, 2.3, 2.4_
 
   - [ ] 6.8 实现 AI 重新生成 Route Handler `app/api/ai/regenerate-summary/route.ts` 和 `regenerate-mindmap/route.ts`
@@ -212,7 +212,7 @@
     - _Requirements: 7.5, 8.4_
 
   - [ ] 6.9 实现 PDF 下载 Route Handler `app/api/documents/[id]/download-pdf/route.ts`
-    - GET 方法：读取 document_contents + document_summaries + document_mindmaps → 生成 PDF → 返回 Blob
+    - GET 方法：读取 document_contents + document_summaries + document_mindmaps → 使用 @react-pdf/renderer 生成 PDF → 返回 Blob
     - 仅支持 PDF 导出，其他格式不实现
     - 文件名格式：`{文档标题}_{YYYY-MM-DD}.pdf`
     - 缺失内容标注"暂无内容"
@@ -340,8 +340,9 @@
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
 
   - [ ] 11.5 实现思维导图展示 `components/document-detail/MindmapViewer.tsx`
-    - 从 document_mindmaps.mindmap_json 读取预生成数据
-    - 可交互树形图（展开/折叠/点击定位）
+    - 使用 React Flow（@xyflow/react）渲染可交互树形图
+    - 从 document_mindmaps.mindmap_json 读取预生成数据，转换为 React Flow nodes/edges 格式
+    - 支持节点展开/折叠/点击定位到文档对应位置
     - 数据为空时显示提示 + 重新生成按钮
     - 重新生成：触发后轮询 mindmap_status（running → success/failed），成功后重新拉取数据
     - 超时 60 秒错误处理
