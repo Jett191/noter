@@ -44,8 +44,8 @@ graph TB
 
     subgraph External["外部服务"]
         LlamaParse[LlamaParse API]
-        EmbeddingAPI[Embedding API]
-        LLMAPI[LLM API]
+        EmbeddingAPI["Gemini Embedding API (gemini-embedding-2)"]
+        LLMAPI["小米 MiMo LLM API (MiMo-V2.5-Pro)"]
     end
 
     UI --> Store
@@ -384,7 +384,7 @@ interface DocumentDetailState {
 | heading_path | jsonb | 标题层级路径 |
 | token_count | int | token 数量 |
 | char_start / char_end | int | 在原始 Markdown 中的字符位置 |
-| embedding | vector | 向量数据 |
+| embedding | vector | 向量数据（768 维，Gemini gemini-embedding-2） |
 | metadata | jsonb | 额外元数据 |
 | deleted | int (0/1) | 软删除 |
 | created_at | timestamptz | 创建时间 |
@@ -669,6 +669,64 @@ export type TemplateType = 'default' | 'academic' | 'clean' | 'card'
 
 ---
 
+## 外部服务配置
+
+### API 端点与模型
+
+| 服务 | Endpoint | 模型 | 向量维度 | Secret 名称 |
+|------|----------|------|----------|-------------|
+| Gemini Embedding | `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent` | gemini-embedding-2 | 768 | `Embedding` |
+| 小米 MiMo LLM | `https://token-plan-sgp.xiaomimimo.com/v1` | MiMo-V2.5-Pro | — | `LLM` |
+| LlamaParse | `https://api.cloud.llamaindex.ai/api/v1/parsing` | agentic tier | — | `LlamaParse` |
+
+### Edge Function 环境变量（Supabase Secrets）
+
+| Secret 名称 | 用途 |
+|---|---|
+| `Embedding` | Gemini Embedding API Key |
+| `LLM` | 小米 MiMo LLM API Key |
+| `LlamaParse` | LlamaParse API Key |
+| `SUPABASE_URL` | Supabase 项目 URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Service Role Key（Edge Function 内部操作数据库/Storage） |
+
+### Embedding API 调用示例
+
+```typescript
+// Edge Function 中调用 Gemini Embedding
+const response = await fetch(
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent',
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content: { parts: [{ text: chunkText }] },
+      key: Deno.env.get('Embedding'),
+    }),
+  }
+)
+// 注意：Gemini Embedding API 使用 URL query param ?key=API_KEY 或 header x-goog-api-key
+```
+
+### LLM API 调用示例
+
+```typescript
+// Edge Function 中调用小米 MiMo LLM（OpenAI 兼容格式）
+const response = await fetch('https://token-plan-sgp.xiaomimimo.com/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${Deno.env.get('LLM')}`,
+  },
+  body: JSON.stringify({
+    model: 'MiMo-V2.5-Pro',
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.3,
+  }),
+})
+```
+
+---
+
 ## Edge Function 设计
 
 系统共 4 个 Edge Function，各自职责单一、互不耦合：
@@ -719,7 +777,7 @@ flowchart TD
     A[接收请求: documentId, userId] --> B[从 document_contents 读取标准化 Markdown]
     B --> C[文本清洗：移除图片标记、HTML 标签、多余空白]
     C --> D[按段落边界优先分片：最大 1000 字符/片，重叠 200 字符]
-    D --> E[批量调用 Embedding API 生成向量]
+    D --> E[批量调用 Gemini Embedding API 生成 768 维向量]
     E --> F[批量写入 document_chunks 表]
     F --> G[更新 vector_status: success]
     G --> H[并行触发 generate-summary 和 generate-mindmap]
@@ -840,7 +898,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    A[用户查询] --> B[Route Handler 生成 query_embedding]
+    A[用户查询] --> B[Route Handler 调用 Gemini gemini-embedding-2 生成 768 维 query_embedding]
     B --> C[调用 hybrid_search RPC]
     C --> D[关键词搜索: documents.title + document_contents]
     C --> E[向量搜索: document_chunks.embedding]
@@ -856,7 +914,7 @@ flowchart LR
 -- 混合搜索函数（标签不参与搜索，仅用于筛选）
 CREATE OR REPLACE FUNCTION hybrid_search(
   query_text TEXT,
-  query_embedding vector,           -- 维度必须与 document_chunks.embedding 一致
+  query_embedding vector,           -- 768 维（Gemini gemini-embedding-2）
   match_count INT DEFAULT 20        -- 最大限制 50
 )
 RETURNS TABLE (
@@ -921,7 +979,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
 
-> **说明**：Route Handler `/api/search/route.ts` 负责生成 query_embedding（调用 Embedding API），然后调用此 RPC。标签不参与搜索，仅通过左侧面板筛选。
+> **说明**：Route Handler `/api/search/route.ts` 负责生成 query_embedding（调用 Gemini gemini-embedding-2 API），然后调用此 RPC。标签不参与搜索，仅通过左侧面板筛选。
 
 ---
 

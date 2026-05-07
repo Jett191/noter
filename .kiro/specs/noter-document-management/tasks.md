@@ -61,7 +61,7 @@
   - [ ] 2.2 设计并创建 hybrid_search RPC 函数
     - 函数签名：`hybrid_search(query_text text, query_embedding vector, match_count int default 20)`
     - match_count 最大限制为 50（函数内部 LEAST(match_count, 50)）
-    - query_embedding 的 vector 维度必须与 document_chunks.embedding 完全一致
+    - query_embedding 的 vector 维度为 768（Gemini gemini-embedding-2）
     - 用于混合搜索文档标题和正文分片内容（不搜索标签，标签仅用于筛选）
     - 支持关键词搜索（documents.title + document_contents.markdown_content）和向量搜索（document_chunks.embedding 余弦相似度）融合排序
     - 搜索范围包含 documents、document_contents、document_chunks 表（不包含 tags）
@@ -102,7 +102,7 @@
     - 文本清洗（移除图片标记、HTML 标签、多余空白）
     - 按段落边界分片（最大 1000 字符/片，重叠 200 字符）
     - 记录 chunk_index、char_start、char_end、heading_path
-    - 批量调用 Embedding API 生成向量
+    - 批量调用 Gemini Embedding API（gemini-embedding-2，768 维）生成向量
     - 开始时更新 documents.vector_status = 'running'
     - 写入 document_chunks 表
     - 成功后更新 documents.vector_status = 'success'
@@ -114,7 +114,7 @@
   - [ ] 3.3 实现 generate-summary Edge Function `supabase/functions/generate-summary/index.ts`
     - 从 document_contents 读取标准化 Markdown
     - 更新 documents.summary_status = 'running'
-    - 内容 ≥ 50 字时调用 LLM API 生成总结（summary + key_points + keywords）
+    - 内容 ≥ 50 字时调用小米 MiMo LLM API（MiMo-V2.5-Pro）生成总结（summary + key_points + keywords）
     - 保存到 document_summaries 表
     - 更新 documents.summary_status = 'success'
     - 检查 mindmap_status 是否也为 success，若是则更新 documents.status = 'ready'
@@ -127,7 +127,7 @@
     - 从 document_contents 读取标准化 Markdown
     - 更新 documents.mindmap_status = 'running'
     - 提取标题层级结构（h1-h6）
-    - 调用 LLM API 生成树形 JSON（节点 ≤ 200 个）
+    - 调用小米 MiMo LLM API（MiMo-V2.5-Pro）生成树形 JSON（节点 ≤ 200 个）
     - 校验 JSON 结构合法性
     - 保存到 document_mindmaps 表（mindmap_json + markdown_outline）
     - 更新 documents.mindmap_status = 'success'
@@ -202,8 +202,8 @@
 
   - [ ] 6.7 实现混合搜索 Route Handler `app/api/search/route.ts`
     - 依赖：hybrid_search RPC 已创建（Task 2.2 完成后）
-    - GET 方法：使用 fetch 调用 Embedding API 生成 query_embedding → 调用 hybrid_search RPC → 返回结果
-    - Route Handler 负责生成 query embedding（直接 fetch，不使用 openai 包），RPC 负责搜索逻辑
+    - GET 方法：使用 fetch 调用 Gemini Embedding API（gemini-embedding-2）生成 768 维 query_embedding → 调用 hybrid_search RPC → 返回结果
+    - Route Handler 负责生成 query embedding（直接 fetch Gemini API，不使用 openai 包），RPC 负责搜索逻辑
     - _Requirements: 2.2, 2.3, 2.4_
 
   - [ ] 6.8 实现 AI 重新生成 Route Handler `app/api/ai/regenerate-summary/route.ts` 和 `regenerate-mindmap/route.ts`
