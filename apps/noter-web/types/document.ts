@@ -10,7 +10,7 @@ export type DocumentStatus = 'processing' | 'ready' | 'failed'
 export type ProcessingStatus = 'pending' | 'running' | 'success' | 'failed'
 
 /** 内置阅读模板类型 */
-export type TemplateType = 'default' | 'academic' | 'clean' | 'card'
+export type TemplateType = 'default' | 'academic' | 'compact' | 'card'
 
 // ===== 核心数据接口 =====
 
