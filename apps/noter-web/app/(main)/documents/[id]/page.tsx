@@ -90,7 +90,7 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ id: s
         {/* 顶部工具栏 */}
         <div className='flex items-center justify-between'>
           <TemplateSwitcher template={template} onTemplateChange={setTemplate} />
-          <DownloadButton documentId={document!.id} title={document!.title} />
+          <DownloadButton title={document!.title} />
         </div>
 
         {/* 文档正文 */}

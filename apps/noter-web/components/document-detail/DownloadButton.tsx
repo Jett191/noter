@@ -1,59 +1,69 @@
 'use client'
 
-import { useState } from 'react'
 import { Button } from '@noter/ui/components/button'
-import { Download, Loader2 } from 'lucide-react'
+import { Download } from 'lucide-react'
 
 interface DownloadButtonProps {
-  documentId: string
   title: string
 }
 
-export function DownloadButton({ documentId, title }: DownloadButtonProps) {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export function DownloadButton({ title }: DownloadButtonProps) {
+  const handleDownload = () => {
+    // 获取文档正文区域的 HTML
+    const articleEl = document.querySelector('main article')
+    if (!articleEl) return
 
-  const handleDownload = async () => {
-    setLoading(true)
-    setError(null)
+    const content = articleEl.innerHTML
 
-    try {
-      const response = await fetch(`/api/documents/${documentId}/download-pdf`)
-      if (!response.ok) {
-        const errData = await response.json().catch(() => null)
-        setError(errData?.message || `下载失败 (${response.status})`)
-        return
-      }
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      const date = new Date().toISOString().slice(0, 10)
-      a.href = url
-      a.download = `${title}_${date}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '下载失败，请重试'
-      setError(message)
-    } finally {
-      setLoading(false)
-    }
+    // 收集当前页面的所有样式表
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map((el) => el.outerHTML)
+      .join('\n')
+
+    // 打开新窗口，只包含文档正文
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>${title}</title>
+        ${styles}
+        <style>
+          body {
+            padding: 40px;
+            max-width: 100%;
+            margin: 0 auto;
+          }
+          @page {
+            margin: 15mm;
+            size: A4;
+          }
+          @media print {
+            body { padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <article>${content}</article>
+      </body>
+      </html>
+    `)
+    printWindow.document.close()
+
+    // 等待样式加载完成后打印
+    setTimeout(() => {
+      printWindow.print()
+      printWindow.close()
+    }, 500)
   }
 
   return (
-    <div className='flex flex-col items-end gap-1'>
-      <Button
-        variant='outline'
-        size='sm'
-        disabled={loading}
-        onClick={handleDownload}
-        aria-label='下载文档 PDF'>
-        {loading ? <Loader2 className='h-4 w-4 animate-spin' /> : <Download className='h-4 w-4' />}
-        <span className='ml-1.5'>{loading ? '生成中...' : '下载'}</span>
-      </Button>
-      {error && <p className='text-destructive max-w-[200px] text-right text-xs'>{error}</p>}
-    </div>
+    <Button variant='outline' size='sm' onClick={handleDownload} aria-label='下载文档 PDF'>
+      <Download className='h-4 w-4' />
+      <span className='ml-1.5'>下载</span>
+    </Button>
   )
 }
