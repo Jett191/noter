@@ -1,10 +1,10 @@
 import { ZodError } from 'zod'
 import { error } from './response'
 
-export function handler(handler: (request: Request) => Promise<Response>) {
-  return async function (request: Request) {
+export function handler<T = unknown>(handler: (request: Request, context: T) => Promise<Response>) {
+  return async function (request: Request, context: T) {
     try {
-      return await handler(request)
+      return await handler(request, context)
     } catch (err) {
       if (err instanceof ZodError) {
         return error(err.issues[0]?.message || '参数错误', 400)

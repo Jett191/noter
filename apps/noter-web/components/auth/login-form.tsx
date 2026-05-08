@@ -47,7 +47,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'form'>)
       await userApi.login(form)
       const user = await userApi.getProfile()
       setUser(user)
-      router.replace('/home')
+      router.replace('/documents')
     } catch (error) {
       console.error(error)
     } finally {
