@@ -6,7 +6,7 @@ export const academicTemplate: TemplateConfig = {
   name: 'academic',
   label: '学术',
   description: '衬线字体，论文风格，适合学术文档阅读',
-  wrapperClassName: 'bg-[#faf8f5] rounded-lg p-8 md:p-14 max-w-[800px] mx-auto',
+  wrapperClassName: 'p-8 md:p-14 max-w-[800px] mx-auto',
   components: {
     h1: ({ children }) => (
       <h1 className='mt-12 mb-8 text-center font-serif text-3xl font-bold tracking-wide text-gray-900'>

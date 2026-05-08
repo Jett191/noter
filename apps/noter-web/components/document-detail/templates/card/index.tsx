@@ -7,7 +7,7 @@ export const cardTemplate: TemplateConfig = {
   name: 'card',
   label: '卡片',
   description: '内容分块，卡片式布局，视觉层次分明',
-  wrapperClassName: 'bg-[#f5f5f5] p-4 md:p-8 space-y-6',
+  wrapperClassName: 'p-4 md:p-8 space-y-6',
   components: {
     h1: ({ children }) => (
       <h1 className='mb-6 flex items-center gap-3 border-b-2 border-blue-500/30 pb-4 text-2xl font-bold text-gray-900'>

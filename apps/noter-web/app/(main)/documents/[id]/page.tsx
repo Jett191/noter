@@ -11,6 +11,7 @@ import { AIChatPanel } from '@/components/document-detail/AIChatPanel'
 import { MindmapViewer } from '@/components/document-detail/MindmapViewer'
 import { SummaryCard } from '@/components/document-detail/SummaryCard'
 import { DownloadButton } from '@/components/document-detail/DownloadButton'
+import { ScrollArea } from '@noter/ui/components/scroll-area'
 import { Skeleton } from '@noter/ui/components/skeleton'
 import { Button } from '@noter/ui/components/button'
 
@@ -76,19 +77,20 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ id: s
   const mindmap = docWithRelations.mindmap ?? null
 
   return (
-    <div className='flex gap-6 p-6'>
-      {/* 左侧：大纲 + 元信息 */}
-      <aside className='sticky top-6 max-h-[calc(100vh-3rem)] w-56 shrink-0 space-y-6 overflow-y-auto'>
-        <DocumentOutline outline={content?.outline ?? null} />
-        <DocumentMeta document={document} />
+    <div className='flex justify-center gap-6 p-6'>
+      {/* 左侧：大纲 */}
+      <aside className='sticky top-28 h-[calc(100vh-262px)] w-56 shrink-0'>
+        <ScrollArea className='h-full'>
+          <DocumentOutline outline={content?.outline ?? null} />
+        </ScrollArea>
       </aside>
 
       {/* 中间：正文 + 思维导图 + 总结 */}
-      <main className='min-w-0 flex-1 space-y-8'>
+      <main className='max-w-4xl min-w-0 flex-1 space-y-8'>
         {/* 顶部工具栏 */}
         <div className='flex items-center justify-between'>
           <TemplateSwitcher template={template} onTemplateChange={setTemplate} />
-          <DownloadButton documentId={document.id} title={document.title} />
+          <DownloadButton documentId={document!.id} title={document!.title} />
         </div>
 
         {/* 文档正文 */}
@@ -105,7 +107,12 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ id: s
         <SummaryCard summary={summary} />
       </main>
 
-      {/* 右侧：AI 问答面板（可隐藏） */}
+      {/* 右侧：文档元信息 */}
+      <aside className='sticky top-28 h-fit w-52 shrink-0'>
+        <DocumentMeta document={document!} />
+      </aside>
+
+      {/* AI 问答面板（可隐藏） */}
       <AIChatPanel visible={panelVisible} onToggle={togglePanel} />
     </div>
   )

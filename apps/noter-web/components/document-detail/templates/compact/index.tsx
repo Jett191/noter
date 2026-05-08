@@ -6,7 +6,7 @@ export const compactTemplate: TemplateConfig = {
   name: 'compact',
   label: '紧凑',
   description: '信息密度高，适合长文档快速浏览',
-  wrapperClassName: 'bg-white p-6 md:p-8',
+  wrapperClassName: 'p-6 md:p-8',
   components: {
     h1: ({ children }) => (
       <h1 className='mt-5 mb-2 border-b border-gray-200 pb-2 text-xl font-bold text-gray-900'>

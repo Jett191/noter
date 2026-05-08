@@ -29,7 +29,7 @@ export function DocumentOutline({ outline }: DocumentOutlineProps) {
       <h3 className='text-muted-foreground mb-2 px-2 text-xs font-semibold tracking-wider uppercase'>
         目录
       </h3>
-      <nav aria-label='文档大纲' className='max-h-[50vh] overflow-y-auto pr-1'>
+      <nav aria-label='文档大纲' className='overflow-y-auto pr-1'>
         <ul className='space-y-1'>
           {filteredOutline.map((node) => (
             <OutlineItem key={node.id} node={node} activeId={activeId} onSelect={setActiveId} />

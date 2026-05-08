@@ -6,7 +6,7 @@ export const defaultTemplate: TemplateConfig = {
   name: 'default',
   label: '默认',
   description: '现代简约风，柔和配色，适合日常阅读',
-  wrapperClassName: 'bg-white rounded-xl shadow-sm p-8 md:p-12',
+  wrapperClassName: 'p-8 md:p-12',
   components: {
     h1: ({ children }) => (
       <h1 className='relative mt-8 mb-4 pb-2 text-3xl font-bold tracking-tight text-gray-900'>
