@@ -9,15 +9,17 @@ export const cardTemplate: TemplateConfig = {
   description: '内容分块，卡片式布局，视觉层次分明',
   wrapperClassName: 'p-4 md:p-8 space-y-6',
   components: {
-    h1: ({ children }) => (
-      <h1 className='mb-6 flex items-center gap-3 border-b-2 border-blue-500/30 pb-4 text-2xl font-bold text-gray-900'>
+    h1: ({ children, id }) => (
+      <h1
+        id={id}
+        className='mb-6 flex items-center gap-3 border-b-2 border-blue-500/30 pb-4 text-2xl font-bold text-gray-900'>
         <span className='h-8 w-1.5 rounded-full bg-gradient-to-b from-blue-500 to-purple-500' />
         {children}
       </h1>
     ),
-    h2: ({ children }) => (
+    h2: ({ children, id }) => (
       <div className='mt-6 rounded-xl border border-gray-100 bg-white p-6 shadow-sm'>
-        <h2 className='mb-4 flex items-center gap-2 text-xl font-semibold text-gray-800'>
+        <h2 id={id} className='mb-4 flex items-center gap-2 text-xl font-semibold text-gray-800'>
           <span className='rounded-md bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700'>
             §
           </span>
@@ -25,13 +27,17 @@ export const cardTemplate: TemplateConfig = {
         </h2>
       </div>
     ),
-    h3: ({ children }) => (
-      <h3 className='mt-5 mb-2 border-l-3 border-blue-300 pl-3 text-lg font-semibold text-gray-700'>
+    h3: ({ children, id }) => (
+      <h3
+        id={id}
+        className='mt-5 mb-2 border-l-3 border-blue-300 pl-3 text-lg font-semibold text-gray-700'>
         {children}
       </h3>
     ),
-    h4: ({ children }) => (
-      <h4 className='mt-4 mb-2 text-base font-medium text-gray-600'>{children}</h4>
+    h4: ({ children, id }) => (
+      <h4 id={id} className='mt-4 mb-2 text-base font-medium text-gray-600'>
+        {children}
+      </h4>
     ),
     p: ({ children }) => <p className='my-3 text-base leading-[1.75] text-gray-700'>{children}</p>,
     a: ({ href, children }) => (

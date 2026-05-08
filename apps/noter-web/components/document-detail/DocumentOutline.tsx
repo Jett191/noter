@@ -46,14 +46,68 @@ interface OutlineItemProps {
   onSelect: (id: string) => void
 }
 
+/**
+ * 生成和 rehype-slug (github-slugger) 一致的 id
+ */
+function toSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\p{L}\p{N}\u4e00-\u9fff\-_]/gu, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
 function OutlineItem({ node, activeId, onSelect }: OutlineItemProps) {
   const handleClick = useCallback(() => {
-    const element = document.getElementById(node.id)
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      onSelect(node.id)
+    // 尝试用 rehype-slug 风格的 id 查找
+    const slug = toSlug(node.title)
+    let element = document.getElementById(slug)
+    // 回退：用原始 node.id
+    if (!element) {
+      element = document.getElementById(node.id)
     }
-  }, [node.id, onSelect])
+    // 再回退：按标题文本查找
+    if (!element) {
+      const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6')
+      for (const h of headings) {
+        if (h.textContent?.trim() === node.title) {
+          element = h as HTMLElement
+          break
+        }
+      }
+    }
+    if (element) {
+      const el = element
+      // 滚动到元素位置，偏下显示（距顶部 120px）
+      const top = el.getBoundingClientRect().top + window.scrollY - 120
+      window.scrollTo({ top, behavior: 'smooth' })
+      onSelect(node.id)
+
+      // 高亮闪烁两次提示（用内联 style 实现，避免 CSS purge 问题）
+      const originalBg = el.style.backgroundColor
+      const originalTransition = el.style.transition
+      const originalRadius = el.style.borderRadius
+      el.style.transition = 'background-color 0.3s ease'
+      el.style.borderRadius = '4px'
+
+      const blink = (count: number) => {
+        if (count <= 0) {
+          el.style.backgroundColor = originalBg
+          el.style.transition = originalTransition
+          el.style.borderRadius = originalRadius
+          return
+        }
+        el.style.backgroundColor = 'rgba(59, 130, 246, 0.15)'
+        setTimeout(() => {
+          el.style.backgroundColor = 'transparent'
+          setTimeout(() => blink(count - 1), 300)
+        }, 300)
+      }
+      setTimeout(() => blink(2), 300)
+    }
+  }, [node.id, node.title, onSelect])
 
   // 根据层级计算缩进: h1=0, h2=4, h3=8, h4=12
   const indent = (node.level - 1) * 16

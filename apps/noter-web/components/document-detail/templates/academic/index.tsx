@@ -8,21 +8,29 @@ export const academicTemplate: TemplateConfig = {
   description: '衬线字体，论文风格，适合学术文档阅读',
   wrapperClassName: 'p-8 md:p-14 max-w-[800px] mx-auto',
   components: {
-    h1: ({ children }) => (
-      <h1 className='mt-12 mb-8 text-center font-serif text-3xl font-bold tracking-wide text-gray-900'>
+    h1: ({ children, id }) => (
+      <h1
+        id={id}
+        className='mt-12 mb-8 text-center font-serif text-3xl font-bold tracking-wide text-gray-900'>
         {children}
       </h1>
     ),
-    h2: ({ children }) => (
-      <h2 className='mt-10 mb-4 border-b-2 border-gray-300 pb-2 font-serif text-2xl font-bold tracking-normal text-gray-800'>
+    h2: ({ children, id }) => (
+      <h2
+        id={id}
+        className='mt-10 mb-4 border-b-2 border-gray-300 pb-2 font-serif text-2xl font-bold tracking-normal text-gray-800'>
         {children}
       </h2>
     ),
-    h3: ({ children }) => (
-      <h3 className='mt-8 mb-3 font-serif text-xl text-gray-700 italic'>{children}</h3>
+    h3: ({ children, id }) => (
+      <h3 id={id} className='mt-8 mb-3 font-serif text-xl text-gray-700 italic'>
+        {children}
+      </h3>
     ),
-    h4: ({ children }) => (
-      <h4 className='mt-6 mb-2 font-serif text-lg font-semibold text-gray-700'>{children}</h4>
+    h4: ({ children, id }) => (
+      <h4 id={id} className='mt-6 mb-2 font-serif text-lg font-semibold text-gray-700'>
+        {children}
+      </h4>
     ),
     p: ({ children }) => (
       <p className='my-4 text-justify indent-[2em] font-serif text-base leading-[2.0] text-gray-800'>

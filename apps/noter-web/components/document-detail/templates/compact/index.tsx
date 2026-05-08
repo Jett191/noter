@@ -8,19 +8,27 @@ export const compactTemplate: TemplateConfig = {
   description: '信息密度高，适合长文档快速浏览',
   wrapperClassName: 'p-6 md:p-8',
   components: {
-    h1: ({ children }) => (
-      <h1 className='mt-5 mb-2 border-b border-gray-200 pb-2 text-xl font-bold text-gray-900'>
+    h1: ({ children, id }) => (
+      <h1
+        id={id}
+        className='mt-5 mb-2 border-b border-gray-200 pb-2 text-xl font-bold text-gray-900'>
         {children}
       </h1>
     ),
-    h2: ({ children }) => (
-      <h2 className='mt-4 mb-1.5 text-base font-bold text-gray-800'>{children}</h2>
+    h2: ({ children, id }) => (
+      <h2 id={id} className='mt-4 mb-1.5 text-base font-bold text-gray-800'>
+        {children}
+      </h2>
     ),
-    h3: ({ children }) => (
-      <h3 className='mt-3 mb-1 text-sm font-semibold text-gray-700'>{children}</h3>
+    h3: ({ children, id }) => (
+      <h3 id={id} className='mt-3 mb-1 text-sm font-semibold text-gray-700'>
+        {children}
+      </h3>
     ),
-    h4: ({ children }) => (
-      <h4 className='mt-2 mb-1 text-sm font-medium text-gray-600'>{children}</h4>
+    h4: ({ children, id }) => (
+      <h4 id={id} className='mt-2 mb-1 text-sm font-medium text-gray-600'>
+        {children}
+      </h4>
     ),
     p: ({ children }) => (
       <p className='my-1.5 text-[13px] leading-[1.5] text-gray-700'>{children}</p>

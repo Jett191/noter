@@ -8,22 +8,30 @@ export const defaultTemplate: TemplateConfig = {
   description: '现代简约风，柔和配色，适合日常阅读',
   wrapperClassName: 'p-8 md:p-12',
   components: {
-    h1: ({ children }) => (
-      <h1 className='relative mt-8 mb-4 pb-2 text-3xl font-bold tracking-tight text-gray-900'>
+    h1: ({ children, id }) => (
+      <h1
+        id={id}
+        className='relative mt-8 mb-4 pb-2 text-3xl font-bold tracking-tight text-gray-900'>
         <span className='relative z-10'>{children}</span>
         <span className='absolute bottom-0 left-0 h-1 w-24 rounded-full bg-gradient-to-r from-blue-500 to-purple-500' />
       </h1>
     ),
-    h2: ({ children }) => (
-      <h2 className='mt-8 mb-3 border-l-4 border-blue-500 pl-4 text-2xl font-semibold text-gray-800'>
+    h2: ({ children, id }) => (
+      <h2
+        id={id}
+        className='mt-8 mb-3 border-l-4 border-blue-500 pl-4 text-2xl font-semibold text-gray-800'>
         {children}
       </h2>
     ),
-    h3: ({ children }) => (
-      <h3 className='mt-6 mb-2 text-xl font-semibold text-gray-700'>{children}</h3>
+    h3: ({ children, id }) => (
+      <h3 id={id} className='mt-6 mb-2 text-xl font-semibold text-gray-700'>
+        {children}
+      </h3>
     ),
-    h4: ({ children }) => (
-      <h4 className='mt-4 mb-2 text-lg font-medium text-gray-700'>{children}</h4>
+    h4: ({ children, id }) => (
+      <h4 id={id} className='mt-4 mb-2 text-lg font-medium text-gray-700'>
+        {children}
+      </h4>
     ),
     p: ({ children }) => <p className='my-4 text-base leading-[1.8] text-gray-700'>{children}</p>,
     a: ({ href, children }) => (
