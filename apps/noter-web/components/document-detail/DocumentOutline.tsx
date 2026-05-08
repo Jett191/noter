@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { ScrollArea } from '@noter/ui/components/scroll-area'
 import { cn } from '@noter/ui/lib/utils'
 import type { OutlineNode } from '@/types/document'
 
@@ -30,15 +29,13 @@ export function DocumentOutline({ outline }: DocumentOutlineProps) {
       <h3 className='text-muted-foreground mb-2 px-2 text-xs font-semibold tracking-wider uppercase'>
         目录
       </h3>
-      <ScrollArea className='max-h-[60vh]'>
-        <nav aria-label='文档大纲'>
-          <ul className='space-y-0.5'>
-            {filteredOutline.map((node) => (
-              <OutlineItem key={node.id} node={node} activeId={activeId} onSelect={setActiveId} />
-            ))}
-          </ul>
-        </nav>
-      </ScrollArea>
+      <nav aria-label='文档大纲' className='max-h-[50vh] overflow-y-auto pr-1'>
+        <ul className='space-y-1'>
+          {filteredOutline.map((node) => (
+            <OutlineItem key={node.id} node={node} activeId={activeId} onSelect={setActiveId} />
+          ))}
+        </ul>
+      </nav>
     </div>
   )
 }
@@ -61,8 +58,8 @@ function OutlineItem({ node, activeId, onSelect }: OutlineItemProps) {
   // 根据层级计算缩进: h1=0, h2=4, h3=8, h4=12
   const indent = (node.level - 1) * 16
 
-  // 过滤子节点中 h1-h4 的部分
-  const filteredChildren = node.children.filter((child) => child.level <= 4)
+  // 子节点
+  const filteredChildren = node.children
 
   return (
     <li>
@@ -70,7 +67,7 @@ function OutlineItem({ node, activeId, onSelect }: OutlineItemProps) {
         type='button'
         onClick={handleClick}
         className={cn(
-          'w-full truncate rounded-md px-2 py-1 text-left text-sm transition-colors',
+          'w-full truncate rounded-md px-2 py-1.5 text-left text-sm leading-normal transition-colors',
           'hover:bg-accent hover:text-accent-foreground',
           activeId === node.id
             ? 'bg-accent text-accent-foreground font-medium'
@@ -81,7 +78,7 @@ function OutlineItem({ node, activeId, onSelect }: OutlineItemProps) {
         {node.title}
       </button>
       {filteredChildren.length > 0 && (
-        <ul className='space-y-0.5'>
+        <ul className='space-y-1'>
           {filteredChildren.map((child) => (
             <OutlineItem key={child.id} node={child} activeId={activeId} onSelect={onSelect} />
           ))}
@@ -92,15 +89,9 @@ function OutlineItem({ node, activeId, onSelect }: OutlineItemProps) {
 }
 
 /**
- * 递归过滤大纲节点，仅保留 h1-h4 层级
+ * 递归过滤大纲节点，保留所有层级（h1-h6）
  */
 function filterOutlineNodes(nodes: OutlineNode[] | null): OutlineNode[] {
   if (!nodes) return []
-
   return nodes
-    .filter((node) => node.level <= 4)
-    .map((node) => ({
-      ...node,
-      children: filterOutlineNodes(node.children)
-    }))
 }

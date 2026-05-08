@@ -78,7 +78,7 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ id: s
   return (
     <div className='flex gap-6 p-6'>
       {/* 左侧：大纲 + 元信息 */}
-      <aside className='sticky top-6 h-fit w-56 shrink-0 space-y-6'>
+      <aside className='sticky top-6 max-h-[calc(100vh-3rem)] w-56 shrink-0 space-y-6 overflow-y-auto'>
         <DocumentOutline outline={content?.outline ?? null} />
         <DocumentMeta document={document} />
       </aside>
