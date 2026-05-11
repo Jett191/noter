@@ -27,9 +27,9 @@ export default function DocumentsPage() {
       <SidePanel />
 
       <div className='flex min-w-0 flex-1 flex-col'>
-        <div className='mb-6 flex items-center justify-between'>
+        <div className='mb-6 flex items-center justify-center gap-4'>
           <SearchBar />
-          <Button onClick={() => setUploadOpen(true)}>
+          <Button onClick={() => setUploadOpen(true)} className='shrink-0'>
             <Upload className='mr-2 h-4 w-4' />
             上传文档
           </Button>
