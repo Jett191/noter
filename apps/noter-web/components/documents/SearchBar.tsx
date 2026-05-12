@@ -137,7 +137,7 @@ export function SearchBar() {
       </div>
 
       {showDropdown && (
-        <div className='bg-popover border-border absolute top-full z-50 mt-1 w-full overflow-hidden rounded-md border shadow-md'>
+        <div className='bg-popover border-border absolute top-full z-50 mt-1 max-h-80 w-full overflow-hidden rounded-md border shadow-md'>
           {error ? (
             <div className='flex flex-col items-center gap-2 p-4 text-center'>
               <p className='text-destructive text-sm'>{error}</p>
@@ -151,12 +151,12 @@ export function SearchBar() {
           ) : results.length === 0 ? (
             <div className='text-muted-foreground p-4 text-center text-sm'>未找到相关文档</div>
           ) : (
-            <ul className='max-h-80 overflow-y-auto'>
-              {results.map((result) => (
-                <li key={result.documentId}>
+            <ul>
+              {results.map((result, index) => (
+                <li key={`${result.documentId}-${index}`}>
                   <button
                     type='button'
-                    className='hover:bg-accent w-full cursor-pointer px-4 py-3 text-left transition-colors'
+                    className='hover:bg-accent max-h-20 w-full cursor-pointer overflow-hidden px-4 py-2 text-left transition-colors'
                     onClick={() => handleResultClick(result.documentId)}>
                     <div className='flex items-center justify-between gap-2'>
                       <span className='text-foreground truncate text-sm font-medium'>
@@ -166,10 +166,13 @@ export function SearchBar() {
                         {matchTypeLabel[result.matchType] ?? result.matchType}
                       </Badge>
                     </div>
-                    <div
-                      className='text-muted-foreground [&>mark]:text-foreground mt-1 line-clamp-2 text-xs [&>mark]:bg-yellow-200 dark:[&>mark]:bg-yellow-800'
-                      dangerouslySetInnerHTML={{ __html: result.matchedContent }}
-                    />
+                    <p className='text-muted-foreground mt-1 line-clamp-2 text-xs'>
+                      {result.matchedContent
+                        .replace(/<[^>]*>/g, '')
+                        .replace(/\s+/g, ' ')
+                        .trim()
+                        .slice(0, 200)}
+                    </p>
                   </button>
                 </li>
               ))}
