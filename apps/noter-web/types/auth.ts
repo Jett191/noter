@@ -51,6 +51,15 @@ export interface UpdateProfileParams {
   avatarUrl?: string | null
 }
 
+export interface ChangePasswordParams {
+  oldPassword: string
+  newPassword: string
+}
+
+export interface ChangeEmailParams {
+  newEmail: string
+}
+
 export interface GithubOAuthResult {
   url: string
 }
