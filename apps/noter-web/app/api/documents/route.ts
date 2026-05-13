@@ -27,6 +27,7 @@ export const GET = handler(async (request: Request) => {
 
   const params = listDocumentsSchema.parse(rawParams)
   const { page, pageSize, tagIds, orderBy, order } = params
+  const folderId = url.searchParams.get('folderId')
 
   // 计算分页范围
   const from = (page - 1) * pageSize
@@ -38,6 +39,11 @@ export const GET = handler(async (request: Request) => {
     .select('*', { count: 'exact' })
     .eq('user_id', user.id)
     .eq('deleted', 0)
+
+  // 文件夹筛选
+  if (folderId) {
+    query = query.eq('folder_id', folderId)
+  }
 
   // 标签筛选（OR 逻辑：文档关联了任一选中标签即匹配）
   if (tagIds && tagIds.length > 0) {
@@ -127,6 +133,7 @@ export const GET = handler(async (request: Request) => {
     isFavorite: doc.is_favorite,
     isArchived: doc.is_archived,
     deleted: doc.deleted,
+    folderId: doc.folder_id ?? null,
     tags: tagsMap[doc.id] ?? [],
     createdAt: doc.created_at,
     updatedAt: doc.updated_at

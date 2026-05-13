@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useDocumentStore } from '@/stores/document'
 import { useTagStore } from '@/stores/tags'
+import { useFolderStore } from '@/stores/folders'
 import { SearchBar } from '@/components/documents/SearchBar'
-import { SidePanel } from '@/components/documents/side-panel/SidePanel'
+import { FilterSortBar } from '@/components/documents/FilterSortBar'
+import { FolderSidebar } from '@/components/documents/FolderSidebar'
 import DocumentGrid from '@/components/documents/DocumentGrid'
 import { PaginationController } from '@/components/documents/PaginationController'
 import { UploadDialog } from '@/components/documents/UploadDialog'
 import { Button } from '@noter/ui/components/button'
+import { Separator } from '@noter/ui/components/separator'
 import { Upload } from 'lucide-react'
 
 export default function DocumentsPage() {
@@ -16,18 +19,30 @@ export default function DocumentsPage() {
   const { documents, total, page, pageSize, loading, error, fetchDocuments } = useDocumentStore()
   const { setPage, setPageSize } = useDocumentStore()
   const { fetchTags } = useTagStore()
+  const { fetchFolders, selectedFolderId } = useFolderStore()
 
   useEffect(() => {
     fetchDocuments()
     fetchTags()
-  }, [fetchDocuments, fetchTags])
+    fetchFolders()
+  }, [fetchDocuments, fetchTags, fetchFolders])
+
+  // 当选中文件夹变化时重新获取文档
+  useEffect(() => {
+    fetchDocuments()
+  }, [selectedFolderId, fetchDocuments])
 
   return (
-    <div className='flex gap-6 p-6'>
-      <SidePanel />
+    <div className='flex h-full'>
+      {/* 左侧文件夹导航 */}
+      <aside className='border-r p-4'>
+        <FolderSidebar />
+      </aside>
 
-      <div className='flex min-w-0 flex-1 flex-col'>
-        <div className='mb-6 flex items-center justify-center gap-4'>
+      {/* 右侧主内容 */}
+      <div className='flex-1 p-6'>
+        {/* 顶部：搜索 + 上传 */}
+        <div className='mb-4 flex items-center justify-center gap-4'>
           <SearchBar />
           <Button onClick={() => setUploadOpen(true)} className='shrink-0'>
             <Upload className='mr-2 h-4 w-4' />
@@ -35,6 +50,13 @@ export default function DocumentsPage() {
           </Button>
         </div>
 
+        {/* Notion 风格筛选排序栏 */}
+        <FilterSortBar />
+
+        {/* 分界线 */}
+        <Separator className='my-2' />
+
+        {/* 错误提示 */}
         {error && (
           <div className='bg-destructive/10 text-destructive mb-4 flex items-center justify-between rounded-md p-4'>
             <span>{error}</span>
@@ -44,12 +66,14 @@ export default function DocumentsPage() {
           </div>
         )}
 
+        {/* 文档卡片网格 */}
         <DocumentGrid
           documents={documents}
           loading={loading}
           onUpload={() => setUploadOpen(true)}
         />
 
+        {/* 分页 */}
         {total > 0 && (
           <PaginationController
             page={page}

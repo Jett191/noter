@@ -3,9 +3,11 @@
 import { useCallback, useRef, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@noter/ui/components/dialog'
 import { Button } from '@noter/ui/components/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@noter/ui/components/select'
 import { Upload, FileText, XCircle } from 'lucide-react'
 import { cn } from '@noter/ui/lib/utils'
 import { documentApi } from '@/lib/axios/documents'
+import { useFolderStore } from '@/stores/folders'
 import { ALLOWED_EXTENSIONS, MAX_FILE_SIZE } from '@/utils/feature/documents/schemas'
 import UploadProgress from './UploadProgress'
 
@@ -22,7 +24,9 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [documentId, setDocumentId] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const { folders } = useFolderStore()
 
   const resetState = useCallback(() => {
     setFile(null)
@@ -31,6 +35,7 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
     setUploadError(null)
     setDocumentId(null)
     setDragOver(false)
+    setSelectedFolderId('')
   }, [])
 
   const validateFile = (f: File): string | null => {
@@ -92,6 +97,9 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
     try {
       const formData = new FormData()
       formData.append('file', file)
+      if (selectedFolderId) {
+        formData.append('folderId', selectedFolderId)
+      }
 
       const result = await documentApi.upload(formData)
       if (result?.id) {
@@ -169,13 +177,31 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
 
             {/* 已选文件信息 */}
             {file && !validationError && (
-              <div className='flex items-center gap-3 rounded-lg border p-3'>
-                <FileText className='text-muted-foreground h-5 w-5 shrink-0' />
-                <div className='min-w-0 flex-1'>
-                  <p className='truncate text-sm font-medium'>{file.name}</p>
-                  <p className='text-muted-foreground text-xs'>{formatFileSize(file.size)}</p>
+              <div className='space-y-3'>
+                <div className='flex items-center gap-3 rounded-lg border p-3'>
+                  <FileText className='text-muted-foreground h-5 w-5 shrink-0' />
+                  <div className='min-w-0 flex-1'>
+                    <p className='truncate text-sm font-medium'>{file.name}</p>
+                    <p className='text-muted-foreground text-xs'>{formatFileSize(file.size)}</p>
+                  </div>
                 </div>
-                <Button size='sm' onClick={handleUpload} disabled={uploading}>
+                {/* 文件夹选择 */}
+                <div className='flex items-center gap-2'>
+                  <span className='text-muted-foreground text-xs'>保存到：</span>
+                  <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
+                    <SelectTrigger className='h-8 flex-1 text-xs'>
+                      <SelectValue placeholder='最近（默认）' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {folders.map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button size='sm' className='w-full' onClick={handleUpload} disabled={uploading}>
                   上传
                 </Button>
               </div>

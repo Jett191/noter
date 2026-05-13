@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { documentApi } from '@/lib/axios/documents'
+import { useFolderStore } from '@/stores/folders'
 import type { Document } from '@/types/document'
 
 interface DocumentState {
@@ -42,12 +43,14 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
   fetchDocuments: async () => {
     const { page, pageSize, selectedTags } = get()
+    const { selectedFolderId } = useFolderStore.getState()
     set({ loading: true, error: null })
     try {
       const result = await documentApi.list({
         page,
         pageSize,
         tagIds: selectedTags.length > 0 ? selectedTags : undefined,
+        folderId: selectedFolderId ?? undefined,
         orderBy: 'created_at',
         order: 'desc'
       })

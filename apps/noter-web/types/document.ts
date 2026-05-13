@@ -37,6 +37,7 @@ export interface Document {
   isFavorite: number
   isArchived: number
   deleted: number
+  folderId: string | null
   tags: Tag[]
   createdAt: string
   updatedAt: string
@@ -134,6 +135,7 @@ export interface ListParams {
   page: number
   pageSize: number
   tagIds?: string[]
+  folderId?: string
   isFavorite?: number
   isArchived?: number
   orderBy?: 'created_at' | 'title' | 'file_size'

@@ -66,7 +66,10 @@ export const POST = handler(async (request: Request) => {
     return error(`文件上传失败: ${uploadError.message}`, 500)
   }
 
-  // 7. 创建文档记录
+  // 7. 获取 folderId（从 FormData 中）
+  const folderId = formData.get('folderId') as string | null
+
+  // 8. 创建文档记录
   const { data: document, error: insertError } = await supabase
     .from('documents')
     .insert({
@@ -83,7 +86,8 @@ export const POST = handler(async (request: Request) => {
       parse_status: 'pending',
       vector_status: 'pending',
       summary_status: 'pending',
-      mindmap_status: 'pending'
+      mindmap_status: 'pending',
+      folder_id: folderId || null,
     })
     .select()
     .single()
@@ -126,6 +130,7 @@ export const POST = handler(async (request: Request) => {
     isFavorite: document.is_favorite,
     isArchived: document.is_archived,
     deleted: document.deleted,
+    folderId: document.folder_id ?? null,
     tags: [],
     createdAt: document.created_at,
     updatedAt: document.updated_at
