@@ -1,6 +1,6 @@
-# 技术设计文档 — Noter 文档管理系统
+# Design Document — Noter 文档管理系统
 
-## 概述
+## Overview
 
 本设计文档描述 Noter 文档管理系统的技术架构，涵盖文档上传解析、列表展示、混合搜索、标签管理、文档详情渲染、AI 问答/总结/思维导图、下载服务以及数据安全等核心模块。
 
@@ -15,7 +15,7 @@
 
 ---
 
-## 架构
+## Architecture
 
 ### 系统架构图
 
@@ -30,9 +30,9 @@ graph TB
     subgraph NextAPI["Next.js Route Handlers (app/api)"]
         DocAPI["/api/documents/*"]
         TagAPI["/api/tags/*"]
+        FolderAPI["/api/folders/*"]
         SearchAPI["/api/search"]
         AIAPI["/api/ai/*"]
-        DownloadAPI["/api/documents/:id/download-pdf"]
     end
 
     subgraph Supabase["Supabase 平台"]
@@ -43,9 +43,9 @@ graph TB
     end
 
     subgraph External["外部服务"]
-        LlamaParse[LlamaParse API]
-        EmbeddingAPI["Gemini Embedding API (gemini-embedding-2)"]
-        LLMAPI["小米 MiMo LLM API (MiMo-V2.5-Pro)"]
+        LlamaParse["LlamaParse REST API v2"]
+        EmbeddingAPI["Gemini Embedding API (gemini-embedding-2, 768维)"]
+        LLMAPI["小米 MiMo LLM API (mimo-v2.5-pro)"]
     end
 
     UI --> Store
@@ -118,7 +118,7 @@ sequenceDiagram
 
 ---
 
-## 组件与接口
+## Components and Interfaces
 
 ### 前端组件层级
 
@@ -126,32 +126,40 @@ sequenceDiagram
 components/
 ├── documents/                        # 文档列表页组件
 │   ├── DocumentGrid.tsx
-│   ├── DocumentCard.tsx
+│   ├── DocumentCard.tsx              # 电影海报比例 (aspect-[2/3], max-w-[160px])
 │   ├── PaginationController.tsx
 │   ├── SearchBar.tsx
+│   ├── FilterSortBar.tsx             # Notion 风格筛选排序栏
+│   ├── FolderSidebar.tsx             # 左侧文件夹导航
 │   ├── UploadDialog.tsx
 │   ├── UploadProgress.tsx
-│   ├── EmptyState.tsx
-│   └── side-panel/
-│       ├── SidePanel.tsx
-│       ├── TagManager.tsx
-│       ├── UserPanel.tsx
-│       └── TagFilterList.tsx
+│   └── EmptyState.tsx
 ├── document-detail/                  # 文档详情页组件
-│   ├── TemplateRenderer.tsx
+│   ├── templates/                    # 模板系统
+│   │   ├── core/
+│   │   │   ├── BaseMarkdownRenderer.tsx
+│   │   │   ├── TemplateHost.tsx
+│   │   │   └── template-registry.ts
+│   │   ├── default/                  # 现代简约模板
+│   │   ├── academic/                 # 学术论文模板
+│   │   ├── compact/                  # 紧凑模板
+│   │   └── card/                     # 卡片模板
 │   ├── TemplateSwitcher.tsx
-│   ├── DocumentOutline.tsx
-│   ├── DocumentMeta.tsx
+│   ├── DocumentOutline.tsx           # shadcn ScrollArea, sticky top-28, h1-h6 全层级
+│   ├── DocumentMeta.tsx              # 右侧元数据面板
 │   ├── AIChatPanel.tsx               # 仅 UI，不实现后端
 │   ├── ChatMessage.tsx
 │   ├── MindmapViewer.tsx
 │   ├── SummaryCard.tsx
-│   └── DownloadButton.tsx
+│   └── DownloadButton.tsx            # 仅需 title prop, window.print() 方案
+
+types/
+├── template.ts                       # TemplateConfig 接口, TemplateType 类型
 
 app/(main)/documents/
-├── page.tsx                          # 文档管理主页面（组装 components/documents/*）
+├── page.tsx                          # 文档管理主页面（左侧文件夹导航 | 右侧主内容）
 └── [id]/
-    └── page.tsx                      # 文档详情页（组装 components/document-detail/*）
+    └── page.tsx                      # 文档详情页（三栏：大纲 | 正文 | 元数据）
 ```
 
 ### API 模块接口
@@ -166,7 +174,14 @@ export const documentApi = {
   getById: (id: string) => http.get<Document>(`api/documents/${id}`),
   delete: (id: string) => http.delete<void>(`api/documents/${id}`),
   getStatus: (id: string) => http.get<DocumentStatus>(`api/documents/${id}/status`),
-  downloadPdf: (id: string) => http.get<Blob>(`api/documents/${id}/download-pdf`, undefined, { responseType: 'blob' }),
+}
+
+// lib/axios/folders.ts - 新增模块
+export const folderApi = {
+  list: () => http.get<Folder[]>('api/folders'),
+  create: (data: CreateFolderInput) => http.post<Folder>('api/folders', data),
+  update: (id: string, data: UpdateFolderInput) => http.patch<Folder>(`api/folders/${id}`, data),
+  delete: (id: string) => http.delete<void>(`api/folders/${id}`),
 }
 
 // lib/axios/tags.ts - 新增模块
@@ -195,14 +210,17 @@ export const aiApi = {
 
 | 方法 | 路径 | 描述 | Zod Schema |
 |------|------|------|------------|
-| GET | `/api/documents` | 文档列表（分页+标签筛选） | `listDocumentsSchema` |
-| POST | `/api/documents/upload` | 上传文档 | FormData 校验 |
+| GET | `/api/documents` | 文档列表（分页+标签筛选+文件夹筛选） | `listDocumentsSchema` |
+| POST | `/api/documents/upload` | 上传文档（FormData 含 folderId 字段） | FormData 校验 |
 | GET | `/api/documents/[id]` | 文档详情 | `documentIdSchema` |
 | DELETE | `/api/documents/[id]` | 删除文档 | `documentIdSchema` |
 | GET | `/api/documents/[id]/status` | 查询解析状态 | `documentIdSchema` |
-| GET | `/api/documents/[id]/download-pdf` | 生成并下载 PDF | `documentIdSchema` |
 | POST | `/api/documents/[id]/tags` | 为文档添加标签 | `addTagSchema` |
 | DELETE | `/api/documents/[id]/tags/[tagId]` | 移除文档标签 | params 校验 |
+| GET | `/api/folders` | 获取用户文件夹列表 | 无 body |
+| POST | `/api/folders` | 创建文件夹 | `createFolderSchema` |
+| PATCH | `/api/folders/[id]` | 更新文件夹（重命名等） | `updateFolderSchema` |
+| DELETE | `/api/folders/[id]` | 删除文件夹 | `folderIdSchema` |
 | GET | `/api/tags` | 获取用户标签列表 | 无 body |
 | POST | `/api/tags` | 创建标签 | `createTagSchema` |
 | DELETE | `/api/tags/[id]` | 删除标签 | `tagIdSchema` |
@@ -224,10 +242,22 @@ interface DocumentState {
   loading: boolean
   error: string | null
   selectedTags: string[]
+  selectedFolderId: string | null
   setPage: (page: number) => void
   setPageSize: (size: number) => void
   setSelectedTags: (tags: string[]) => void
+  setSelectedFolderId: (folderId: string | null) => void
   fetchDocuments: () => Promise<void>
+}
+
+// stores/folders.ts
+interface FolderState {
+  folders: Folder[]
+  loading: boolean
+  fetchFolders: () => Promise<void>
+  createFolder: (name: string, parentId?: string) => Promise<void>
+  updateFolder: (id: string, data: UpdateFolderInput) => Promise<void>
+  deleteFolder: (id: string) => Promise<void>
 }
 
 // stores/tags.ts
@@ -258,7 +288,7 @@ interface DocumentDetailState {
 
 ---
 
-## 数据模型
+## Data Models
 
 ### 数据库表设计
 
@@ -295,6 +325,7 @@ interface DocumentDetailState {
 |------|------|------|
 | id | UUID PK | 文档ID |
 | user_id | UUID (FK→profiles) | 所属用户 |
+| folder_id | UUID (nullable, FK→folders) | 所属文件夹，null 表示未分类（显示在"全部文档"中） |
 | title | text | 文档标题 |
 | original_filename | text | 原始文件名 |
 | file_ext | text | 文件后缀（pdf/docx/md 等） |
@@ -315,6 +346,19 @@ interface DocumentDetailState {
 | is_archived | int (0/1) | 是否归档 |
 | deleted | int (0/1) | 软删除 |
 | deleted_at | timestamptz | 删除时间 |
+| created_at / updated_at | timestamptz | 时间戳 |
+
+#### folders — 文件夹表
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | UUID PK | 文件夹ID |
+| user_id | UUID (FK→profiles) | 所属用户 |
+| name | text | 文件夹名称 |
+| parent_id | UUID (nullable, FK→folders) | 父文件夹ID，null 表示顶层 |
+| icon | text | 文件夹图标 |
+| sort_order | int | 排序序号 |
+| deleted | int (0/1) | 软删除 |
 | created_at / updated_at | timestamptz | 时间戳 |
 
 #### document_contents — 文档内容表
@@ -384,7 +428,7 @@ interface DocumentDetailState {
 | heading_path | jsonb | 标题层级路径 |
 | token_count | int | token 数量 |
 | char_start / char_end | int | 在原始 Markdown 中的字符位置 |
-| embedding | vector | 向量数据（768 维，Gemini gemini-embedding-2） |
+| embedding | vector(768) | 向量数据（768 维，Gemini gemini-embedding-2） |
 | metadata | jsonb | 额外元数据 |
 | deleted | int (0/1) | 软删除 |
 | created_at | timestamptz | 创建时间 |
@@ -459,6 +503,9 @@ erDiagram
     profiles ||--o{ documents : "user_id"
     profiles ||--o| user_settings : "user_id"
     profiles ||--o{ tags : "user_id"
+    profiles ||--o{ folders : "user_id"
+    folders ||--o{ documents : "folder_id"
+    folders ||--o{ folders : "parent_id"
     documents ||--o| document_contents : "document_id"
     documents ||--o{ document_assets : "document_id"
     documents ||--o{ document_chunks : "document_id"
@@ -486,6 +533,7 @@ erDiagram
 | profiles | SELECT/UPDATE | `auth.uid() = id` |
 | user_settings | SELECT/INSERT/UPDATE | `auth.uid() = user_id` |
 | documents | SELECT/INSERT/UPDATE/DELETE | `auth.uid() = user_id` |
+| folders | SELECT/INSERT/UPDATE/DELETE | `auth.uid() = user_id` |
 | document_contents | SELECT/INSERT/UPDATE | `auth.uid() = user_id` |
 | document_assets | SELECT/INSERT | `auth.uid() = user_id` |
 | tags | SELECT/INSERT/UPDATE/DELETE | `auth.uid() = user_id` |
@@ -511,7 +559,7 @@ erDiagram
 | Bucket | 访问级别 | 路径格式 | 用途 |
 |--------|----------|----------|------|
 | `userResources` | 私有 | `{user_id}/avatar/{filename}` | 用户头像 |
-| `document-originals` | 私有 | `{user_id}/{document_id}/{filename}` | 原始上传文件（PDF/DOCX/PPTX/TXT/MD） |
+| `document-originals` | 私有 | `{user_id}/{document_id}` | 原始上传文件（PDF/DOCX/PPTX/TXT/MD），不含文件名以避免中文路径问题 |
 | `document-assets-public` | 公开 | `{user_id}/{document_id}/{image_filename}` | 文档解析产生的图片资源 |
 
 **设计说明：**
@@ -530,6 +578,7 @@ export type ProcessingStatus = 'pending' | 'running' | 'success' | 'failed'
 export interface Document {
   id: string
   userId: string
+  folderId: string | null
   title: string
   originalFilename: string
   fileExt: string | null
@@ -634,6 +683,7 @@ export interface DocumentProcessingJob {
 export interface ListParams {
   page: number
   pageSize: number
+  folderId?: string | null
   tagIds?: string[]
   isFavorite?: number
   isArchived?: number
@@ -656,15 +706,52 @@ export interface SearchParams {
 export interface SearchResult {
   documentId: string
   title: string
-  matchedContent: string
+  matchedContent: string    // 渲染为纯文本（strip HTML tags），避免块级元素撑开高度
   score: number
   matchType: 'keyword' | 'vector' | 'hybrid'
 }
 
+// 搜索结果列表中使用 `${documentId}-${index}` 作为 key 避免重复
+// 搜索结果按钮加 max-h-20 overflow-hidden
+
 // types/ai.ts (扩展)
 // ChatInput / ChatMessage / QA 相关类型后续迭代补充
 
-export type TemplateType = 'default' | 'academic' | 'clean' | 'card'
+export type TemplateType = 'default' | 'academic' | 'compact' | 'card'
+
+// types/template.ts
+export interface TemplateConfig {
+  name: TemplateType
+  label: string
+  description: string
+  components: Record<string, React.ComponentType<any>>  // react-markdown components prop
+}
+
+// types/folder.ts
+export interface Folder {
+  id: string
+  userId: string
+  name: string
+  parentId: string | null
+  icon: string | null
+  sortOrder: number
+  deleted: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateFolderInput {
+  name: string
+  parentId?: string
+  icon?: string
+}
+
+export interface UpdateFolderInput {
+  name?: string
+  parentId?: string
+  icon?: string
+  sortOrder?: number
+}
 ```
 
 ---
@@ -675,9 +762,9 @@ export type TemplateType = 'default' | 'academic' | 'clean' | 'card'
 
 | 服务 | Endpoint | 模型 | 向量维度 | Secret 名称 |
 |------|----------|------|----------|-------------|
-| Gemini Embedding | `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent` | gemini-embedding-2 | 768 | `Embedding` |
-| 小米 MiMo LLM | `https://token-plan-sgp.xiaomimimo.com/v1` | MiMo-V2.5-Pro | — | `LLM` |
-| LlamaParse | `https://api.cloud.llamaindex.ai/api/v1/parsing` | agentic tier | — | `LlamaParse` |
+| Gemini Embedding | `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent` | gemini-embedding-2 | 768（需要 outputDimensionality: 768 参数） | `Embedding` |
+| 小米 MiMo LLM | `https://token-plan-sgp.xiaomimimo.com/v1/chat/completions` | mimo-v2.5-pro | — | `LLM` |
+| LlamaParse | `https://api.cloud.llamaindex.ai/api/v2/parse` | agentic tier | — | `LlamaParse` |
 
 ### Edge Function 环境变量（Supabase Secrets）
 
@@ -697,14 +784,18 @@ const response = await fetch(
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent',
   {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': Deno.env.get('Embedding'),
+    },
     body: JSON.stringify({
       content: { parts: [{ text: chunkText }] },
-      key: Deno.env.get('Embedding'),
+      outputDimensionality: 768,
     }),
   }
 )
-// 注意：Gemini Embedding API 使用 URL query param ?key=API_KEY 或 header x-goog-api-key
+// 注意：Gemini Embedding API 使用 header x-goog-api-key 或 URL query param ?key=API_KEY
+// 必须指定 outputDimensionality: 768 以获得 768 维向量
 ```
 
 ### LLM API 调用示例
@@ -718,7 +809,7 @@ const response = await fetch('https://token-plan-sgp.xiaomimimo.com/v1/chat/comp
     'Authorization': `Bearer ${Deno.env.get('LLM')}`,
   },
   body: JSON.stringify({
-    model: 'MiMo-V2.5-Pro',
+    model: 'mimo-v2.5-pro',
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.3,
   }),
@@ -990,24 +1081,26 @@ apps/noter-web/
 ├── app/
 │   ├── (main)/
 │   │   └── documents/
-│   │       ├── page.tsx              # 文档管理主页面
+│   │       ├── page.tsx              # 文档管理主页面（左侧文件夹导航 | 右侧主内容）
 │   │       └── [id]/
-│   │           └── page.tsx          # 文档详情页
+│   │           └── page.tsx          # 文档详情页（三栏：大纲 | 正文 | 元数据）
 │   └── api/
 │       ├── documents/
-│       │   ├── route.ts              # GET 列表
+│       │   ├── route.ts              # GET 列表（支持 folderId 筛选）
 │       │   ├── upload/
-│       │   │   └── route.ts          # POST 上传
+│       │   │   └── route.ts          # POST 上传（FormData 含 folderId）
 │       │   └── [id]/
 │       │       ├── route.ts          # GET 详情, DELETE 删除
 │       │       ├── status/
 │       │       │   └── route.ts      # GET 状态查询
-│       │       ├── download-pdf/
-│       │       │   └── route.ts      # GET PDF 下载（仅支持 PDF 导出）
 │       │       └── tags/
 │       │           ├── route.ts      # POST 添加标签
 │       │           └── [tagId]/
 │       │               └── route.ts  # DELETE 移除标签
+│       ├── folders/
+│       │   ├── route.ts              # GET 列表, POST 创建
+│       │   └── [id]/
+│       │       └── route.ts          # PATCH 更新, DELETE 删除
 │       ├── tags/
 │       │   ├── route.ts              # GET 列表, POST 创建
 │       │   └── [id]/
@@ -1027,42 +1120,53 @@ apps/noter-web/
 ├── components/
 │   ├── documents/                    # 文档列表页组件
 │   │   ├── DocumentGrid.tsx
-│   │   ├── DocumentCard.tsx
+│   │   ├── DocumentCard.tsx          # 电影海报比例 (aspect-[2/3], max-w-[160px])
 │   │   ├── PaginationController.tsx
 │   │   ├── SearchBar.tsx
+│   │   ├── FilterSortBar.tsx         # Notion 风格筛选排序栏
+│   │   ├── FolderSidebar.tsx         # 左侧文件夹导航
 │   │   ├── UploadDialog.tsx
 │   │   ├── UploadProgress.tsx
-│   │   ├── EmptyState.tsx
-│   │   └── side-panel/
-│   │       ├── SidePanel.tsx
-│   │       ├── TagManager.tsx
-│   │       ├── UserPanel.tsx
-│   │       └── TagFilterList.tsx
+│   │   └── EmptyState.tsx
 │   └── document-detail/              # 文档详情页组件
-│       ├── TemplateRenderer.tsx
+│       ├── templates/
+│       │   ├── core/
+│       │   │   ├── BaseMarkdownRenderer.tsx
+│       │   │   ├── TemplateHost.tsx
+│       │   │   └── template-registry.ts
+│       │   ├── default/              # 现代简约
+│       │   ├── academic/             # 学术论文
+│       │   ├── compact/              # 紧凑
+│       │   └── card/                 # 卡片
 │       ├── TemplateSwitcher.tsx
-│       ├── DocumentOutline.tsx
-│       ├── DocumentMeta.tsx
+│       ├── DocumentOutline.tsx       # shadcn ScrollArea, sticky top-28
+│       ├── DocumentMeta.tsx          # 右侧元数据面板
 │       ├── AIChatPanel.tsx           # 仅 UI，不实现后端
 │       ├── ChatMessage.tsx
 │       ├── MindmapViewer.tsx
 │       ├── SummaryCard.tsx
-│       └── DownloadButton.tsx
+│       └── DownloadButton.tsx        # 仅需 title prop, window.print() 方案
 ├── lib/axios/
 │   ├── documents.ts                  # 扩展
+│   ├── folders.ts                    # 新增
 │   ├── tags.ts                       # 新增
 │   ├── search.ts                     # 扩展
 │   └── ai.ts                         # 扩展
 ├── stores/
 │   ├── document.ts                   # 新增
+│   ├── folders.ts                    # 新增
 │   ├── tags.ts                       # 新增
 │   └── documentDetail.ts            # 新增
 ├── types/
 │   ├── document.ts                   # 新增
+│   ├── folder.ts                     # 新增
+│   ├── template.ts                   # 新增（TemplateConfig 接口）
 │   ├── search.ts                     # 扩展
 │   └── ai.ts                         # 扩展
 └── utils/feature/
     ├── documents/
+    │   └── schemas.ts                # 新增
+    ├── folders/
     │   └── schemas.ts                # 新增
     ├── tags/
     │   └── schemas.ts                # 新增
@@ -1084,7 +1188,7 @@ supabase/functions/
 
 ---
 
-## 正确性属性
+## Correctness Properties
 
 *正确性属性是一种在系统所有有效执行中都应成立的特征或行为——本质上是对系统应做什么的形式化陈述。属性是人类可读规格说明与机器可验证正确性保证之间的桥梁。*
 
@@ -1156,9 +1260,9 @@ supabase/functions/
 
 ### Property 12: 标题大纲提取
 
-*For any* 包含 h1-h4 标题的 Markdown 文档，提取的大纲应包含所有 h1-h4 标题，按文档顺序排列，且层级嵌套关系正确。
+*For any* 包含 h1-h6 标题的 Markdown 文档，提取的大纲应包含所有 h1-h6 标题，按文档顺序排列，且层级嵌套关系正确。
 
-**Validates: Requirements 5.5**
+**Validates: Requirements 5.7**
 
 ### Property 13: 空白问题拒绝（UI 层）
 
@@ -1184,17 +1288,17 @@ supabase/functions/
 
 **Validates: Requirements 8.2**
 
-### Property 17: 下载文件名格式
+### Property 17: 浏览器打印下载
 
-*For any* 文档标题和下载日期，生成的文件名应匹配格式 `{title}_{YYYY-MM-DD}.pdf`。
+*For any* 文档正文，通过 window.print() 打开的新窗口应包含完整的文档正文内容和当前模板样式。
+
+**Validates: Requirements 9.2**
+
+### Property 18: 下载按钮状态
+
+*For any* 文档正文为空的情况，下载按钮应处于禁用状态。
 
 **Validates: Requirements 9.4**
-
-### Property 18: 下载内容优雅降级
-
-*For any* 文档内容组合（Markdown 存在，AI 总结可能为空，思维导图可能为空），生成的 PDF 应包含所有已有内容，缺失部分标注为"暂无内容"。
-
-**Validates: Requirements 9.6**
 
 ### Property 19: RLS 数据隔离
 
@@ -1204,7 +1308,7 @@ supabase/functions/
 
 ### Property 20: 存储路径格式
 
-*For any* 上传的文件，其在 `document-originals` 桶中的存储路径应匹配格式 `{user_id}/{document_id}/{filename}`；解析产生的图片在 `document-assets-public` 桶中的路径应匹配格式 `{user_id}/{document_id}/{image_filename}`。
+*For any* 上传的文件，其在 `document-originals` 桶中的存储路径应匹配格式 `{user_id}/{document_id}`（不含文件名，避免中文路径问题）；解析产生的图片在 `document-assets-public` 桶中的路径应匹配格式 `{user_id}/{document_id}/{image_filename}`。
 
 **Validates: Requirements 10.4**
 
@@ -1238,9 +1342,21 @@ supabase/functions/
 
 **Validates: Requirements 11.14**
 
+### Property 26: 文件夹数据隔离
+
+*For any* 两个不同用户 A 和 B，用户 A 的文件夹查询结果中不应包含任何属于用户 B 的文件夹数据，反之亦然。
+
+**Validates: Requirements 12.7**
+
+### Property 27: 文件夹筛选正确性
+
+*For any* 文件夹 F 和属于该文件夹的文档集合，当用户选择文件夹 F 时，返回的文档列表应仅包含 folder_id = F.id 的文档；当未选择文件夹时，应返回所有文档（包括 folder_id 为 null 的文档）。
+
+**Validates: Requirements 12.3, 12.4**
+
 ---
 
-## 错误处理
+## Error Handling
 
 ### 错误处理策略
 
@@ -1261,7 +1377,6 @@ supabase/functions/
 | AI 问答生成 | — | 后续迭代，本阶段不实现 |
 | 思维导图重新生成 | 60s | 错误提示 + 保留重试按钮 |
 | AI 总结重新生成 | 30s | 错误提示 + 保留重试按钮 |
-| PDF 下载生成 | 60s | 错误提示 + 恢复按钮 |
 | Edge Function 解析 | 5min | 标记 failed + 保留原始文件 |
 
 ### 错误码规范
@@ -1283,7 +1398,7 @@ enum ErrorCode {
 
 ---
 
-## 测试策略
+## Testing Strategy
 
 ### 双轨测试方法
 

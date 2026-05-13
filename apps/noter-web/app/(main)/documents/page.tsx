@@ -10,6 +10,7 @@ import { FolderSidebar } from '@/components/documents/FolderSidebar'
 import DocumentGrid from '@/components/documents/DocumentGrid'
 import { PaginationController } from '@/components/documents/PaginationController'
 import { UploadDialog } from '@/components/documents/UploadDialog'
+import { UserAvatarDropdown } from '@/components/documents/UserAvatarDropdown'
 import { Button } from '@noter/ui/components/button'
 import { Separator } from '@noter/ui/components/separator'
 import { Upload } from 'lucide-react'
@@ -41,13 +42,14 @@ export default function DocumentsPage() {
 
       {/* 右侧主内容 */}
       <div className='flex-1 p-6'>
-        {/* 顶部：搜索 + 上传 */}
-        <div className='mb-4 flex items-center justify-center gap-4'>
+        {/* 顶部：搜索 + 上传 + 用户头像 */}
+        <div className='mb-4 flex items-center gap-4'>
           <SearchBar />
           <Button onClick={() => setUploadOpen(true)} className='shrink-0'>
-            <Upload className='mr-2 h-4 w-4' />
+            <Upload data-icon='inline-start' />
             上传文档
           </Button>
+          <UserAvatarDropdown />
         </div>
 
         {/* Notion 风格筛选排序栏 */}
