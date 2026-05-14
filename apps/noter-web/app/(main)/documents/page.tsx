@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useDocumentStore } from '@/stores/document'
 import { useTagStore } from '@/stores/tags'
 import { useFolderStore } from '@/stores/folders'
@@ -35,16 +35,31 @@ export default function DocumentsPage() {
   const { fetchTags } = useTagStore()
   const { fetchFolders, selectedFolderId, setSelectedFolder } = useFolderStore()
 
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const folderIdParam = searchParams.get('folderId')
 
-  // 当从外部带 folderId 进入时，同步到 store
+  // URL → store 单向同步：仅在 folderIdParam 变化时把 store 设成 URL 的值
   useEffect(() => {
-    const next = folderIdParam || null
-    if (next !== selectedFolderId) {
-      setSelectedFolder(next)
+    setSelectedFolder(folderIdParam || null)
+  }, [folderIdParam, setSelectedFolder])
+
+  // store → URL 单向同步：sidebar 等改变了选中文件夹时把 URL 也改一下
+  useEffect(() => {
+    const current = folderIdParam || null
+    if (current === selectedFolderId) return
+    const params = new URLSearchParams(searchParams.toString())
+    if (selectedFolderId) {
+      params.set('folderId', selectedFolderId)
+    } else {
+      params.delete('folderId')
     }
-  }, [folderIdParam, selectedFolderId, setSelectedFolder])
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    // 仅在 selectedFolderId 真正变化时同步，不依赖 searchParams 防止抖动
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFolderId])
 
   useEffect(() => {
     fetchDocuments()

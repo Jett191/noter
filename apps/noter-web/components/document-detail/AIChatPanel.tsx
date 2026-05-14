@@ -1,23 +1,27 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@noter/ui/components/sheet'
 import { Button } from '@noter/ui/components/button'
 import { Input } from '@noter/ui/components/input'
 import { ScrollArea } from '@noter/ui/components/scroll-area'
-import { Loader2, MessageSquare, Send, Square, X } from 'lucide-react'
+import { cn } from '@noter/ui/lib/utils'
+import { Loader2, MessageSquare, Maximize2, PanelLeftClose, Send, Square, X } from 'lucide-react'
 import { ChatMessage, type ChatMessageProps } from './ChatMessage'
 import { useDocumentDetailStore } from '@/stores/documentDetail'
+import type { AIPanelSize } from '@/stores/documentDetail'
 
 interface AIChatPanelProps {
   visible: boolean
   onToggle: () => void
+  size: AIPanelSize
+  onSizeChange: (size: AIPanelSize) => void
 }
 
-export function AIChatPanel({ visible, onToggle }: AIChatPanelProps) {
+export function AIChatPanel({ visible, onToggle, size, onSizeChange }: AIChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessageProps[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [mounted, setMounted] = useState(visible)
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const document = useDocumentDetailStore((s) => s.document)
@@ -32,10 +36,19 @@ export function AIChatPanel({ visible, onToggle }: AIChatPanelProps) {
     }, 0)
   }, [])
 
-  // Auto-scroll when messages change
   useEffect(() => {
     scrollToBottom()
   }, [messages, scrollToBottom])
+
+  // 关闭时延迟卸载，留出退场动画时间
+  useEffect(() => {
+    if (visible) {
+      setMounted(true)
+      return
+    }
+    const timer = setTimeout(() => setMounted(false), 200)
+    return () => clearTimeout(timer)
+  }, [visible])
 
   const handleStop = useCallback(() => {
     if (abortControllerRef.current) {
@@ -53,12 +66,10 @@ export function AIChatPanel({ visible, onToggle }: AIChatPanelProps) {
       content: inputValue.trim()
     }
 
-    // Add user message and an empty assistant message for streaming
     setMessages((prev) => [...prev, userMessage, { role: 'assistant', content: '' }])
     setInputValue('')
     setIsLoading(true)
 
-    // Build message history for the API (only user/assistant messages)
     const historyMessages = [...messages, userMessage].map((m) => ({
       role: m.role,
       content: m.content
@@ -92,7 +103,6 @@ export function AIChatPanel({ visible, onToggle }: AIChatPanelProps) {
         return
       }
 
-      // Read the SSE stream
       const reader = response.body?.getReader()
       if (!reader) {
         throw new Error('No response body')
@@ -165,7 +175,7 @@ export function AIChatPanel({ visible, onToggle }: AIChatPanelProps) {
       setIsLoading(false)
       abortControllerRef.current = null
     }
-  }, [inputValue, isInputEmpty, isLoading, document, messages, scrollToBottom])
+  }, [inputValue, isInputEmpty, isLoading, document, messages])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -174,78 +184,101 @@ export function AIChatPanel({ visible, onToggle }: AIChatPanelProps) {
     }
   }
 
+  if (!mounted) return null
+
   return (
-    <>
-      {/* 右侧面板（展开入口由顶部导航栏控制） */}
-      <Sheet open={visible} onOpenChange={onToggle}>
-        <SheetContent
-          side='right'
-          showCloseButton={false}
-          className='flex w-[380px] flex-col p-0 sm:max-w-[380px]'>
-          {/* 头部 */}
-          <SheetHeader className='flex-row items-center justify-between border-b px-4 py-3'>
-            <SheetTitle className='flex items-center gap-2 text-sm'>
-              <MessageSquare className='h-4 w-4' />
-              AI 问答
-            </SheetTitle>
-            <Button variant='ghost' size='icon-sm' onClick={onToggle}>
-              <X className='h-4 w-4' />
-              <span className='sr-only'>关闭</span>
-            </Button>
-          </SheetHeader>
+    <div
+      role='dialog'
+      aria-label='AI 问答'
+      className={cn(
+        'pointer-events-auto flex h-full min-h-[280px] w-full flex-col overflow-hidden rounded-xl border shadow-lg',
+        'bg-background/85 supports-[backdrop-filter]:bg-background/70 backdrop-blur-md',
+        'transition-all duration-200 ease-out',
+        visible ? 'translate-y-0 opacity-100' : 'pointer-events-none -translate-y-2 opacity-0'
+      )}>
+      {/* 头部 */}
+      <div className='flex items-center justify-between border-b px-4 py-3'>
+        <div className='flex items-center gap-2 text-sm font-medium'>
+          <MessageSquare className='h-4 w-4' />
+          AI 问答
+        </div>
+        <div className='flex items-center gap-1'>
+          {/* 向上拉长：覆盖文档元数据 */}
+          <Button
+            variant='ghost'
+            size='icon-sm'
+            onClick={() => onSizeChange(size === 'tall' ? 'normal' : 'tall')}
+            aria-pressed={size === 'tall'}
+            aria-label={size === 'tall' ? '恢复默认尺寸' : '展开覆盖文档元数据'}
+            title={size === 'tall' ? '恢复默认尺寸' : '展开覆盖文档元数据'}>
+            <Maximize2 className='h-4 w-4' />
+          </Button>
+          {/* 两栏布局：隐藏元数据与大纲 */}
+          <Button
+            variant='ghost'
+            size='icon-sm'
+            onClick={() => onSizeChange(size === 'wide' ? 'normal' : 'wide')}
+            aria-pressed={size === 'wide'}
+            aria-label={size === 'wide' ? '恢复三栏布局' : '切换为两栏布局'}
+            title={size === 'wide' ? '恢复三栏布局' : '切换为两栏布局'}>
+            <PanelLeftClose className='h-4 w-4' />
+          </Button>
+          <Button variant='ghost' size='icon-sm' onClick={onToggle} aria-label='关闭'>
+            <X className='h-4 w-4' />
+          </Button>
+        </div>
+      </div>
 
-          {/* 消息列表 */}
-          <ScrollArea className='flex-1 overflow-hidden'>
-            <div ref={scrollRef} className='flex h-full flex-col gap-3 overflow-y-auto p-4'>
-              {messages.length === 0 && (
-                <div className='flex h-full flex-col items-center justify-center py-12 text-center'>
-                  <MessageSquare className='text-muted-foreground/40 mb-3 h-10 w-10' />
-                  <p className='text-muted-foreground text-sm'>围绕文档内容提问</p>
-                  <p className='text-muted-foreground/60 mt-1 text-xs'>AI 将基于文档内容为你解答</p>
-                </div>
-              )}
-              {messages.map((msg, index) => (
-                <ChatMessage key={index} role={msg.role} content={msg.content} />
-              ))}
-              {isLoading && messages[messages.length - 1]?.content === '' && (
-                <div className='flex items-center gap-2 px-1'>
-                  <Loader2 className='text-muted-foreground h-3 w-3 animate-spin' />
-                  <span className='text-muted-foreground text-xs'>思考中...</span>
-                </div>
-              )}
+      {/* 消息列表 */}
+      <ScrollArea className='flex-1 overflow-hidden'>
+        <div ref={scrollRef} className='flex h-full flex-col gap-3 overflow-y-auto p-4'>
+          {messages.length === 0 && (
+            <div className='flex h-full flex-col items-center justify-center py-12 text-center'>
+              <MessageSquare className='text-muted-foreground/40 mb-3 h-10 w-10' />
+              <p className='text-muted-foreground text-sm'>围绕文档内容提问</p>
+              <p className='text-muted-foreground/60 mt-1 text-xs'>AI 将基于文档内容为你解答</p>
             </div>
-          </ScrollArea>
+          )}
+          {messages.map((msg, index) => (
+            <ChatMessage key={index} role={msg.role} content={msg.content} />
+          ))}
+          {isLoading && messages[messages.length - 1]?.content === '' && (
+            <div className='flex items-center gap-2 px-1'>
+              <Loader2 className='text-muted-foreground h-3 w-3 animate-spin' />
+              <span className='text-muted-foreground text-xs'>思考中...</span>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
 
-          {/* 底部输入区域 */}
-          <div className='flex gap-2 border-t p-3'>
-            <Input
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder='输入你的问题...'
-              className='h-9 flex-1 text-sm'
-              disabled={isLoading}
-            />
-            {isLoading ? (
-              <Button
-                size='sm'
-                variant='destructive'
-                onClick={handleStop}
-                className='h-9 shrink-0 px-3'>
-                <Square className='h-3 w-3' />
-              </Button>
-            ) : (
-              <Button
-                size='sm'
-                onClick={handleSend}
-                disabled={isInputEmpty || !document}
-                className='h-9 shrink-0 px-3'>
-                <Send className='h-4 w-4' />
-              </Button>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
-    </>
+      {/* 底部输入区域 */}
+      <div className='flex gap-2 border-t p-3'>
+        <Input
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder='输入你的问题...'
+          className='h-9 flex-1 text-sm'
+          disabled={isLoading}
+        />
+        {isLoading ? (
+          <Button
+            size='sm'
+            variant='destructive'
+            onClick={handleStop}
+            className='h-9 shrink-0 px-3'>
+            <Square className='h-3 w-3' />
+          </Button>
+        ) : (
+          <Button
+            size='sm'
+            onClick={handleSend}
+            disabled={isInputEmpty || !document}
+            className='h-9 shrink-0 px-3'>
+            <Send className='h-4 w-4' />
+          </Button>
+        )}
+      </div>
+    </div>
   )
 }

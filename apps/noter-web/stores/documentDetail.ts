@@ -4,17 +4,21 @@ import { tagApi } from '@/lib/axios/tags'
 import { aiApi } from '@/lib/axios/ai'
 import type { Document, Tag, TemplateType, ProcessingStatus } from '@/types/document'
 
+export type AIPanelSize = 'normal' | 'tall' | 'wide'
+
 interface DocumentDetailState {
   document: Document | null
   loading: boolean
   error: string | null
   template: TemplateType
   panelVisible: boolean
+  panelSize: AIPanelSize
   summaryStatus: ProcessingStatus | null
   mindmapStatus: ProcessingStatus | null
   fetchDocument: (id: string) => Promise<void>
   setTemplate: (template: TemplateType) => void
   togglePanel: () => void
+  setPanelSize: (size: AIPanelSize) => void
   regenerateSummary: () => Promise<void>
   regenerateMindmap: () => Promise<void>
   addTagToDocument: (tag: Tag) => Promise<void>
@@ -29,6 +33,7 @@ export const useDocumentDetailStore = create<DocumentDetailState>((set, get) => 
   error: null,
   template: 'default',
   panelVisible: false,
+  panelSize: 'normal',
   summaryStatus: null,
   mindmapStatus: null,
 
@@ -48,7 +53,15 @@ export const useDocumentDetailStore = create<DocumentDetailState>((set, get) => 
   },
 
   togglePanel: () => {
-    set((state) => ({ panelVisible: !state.panelVisible }))
+    set((state) => ({
+      panelVisible: !state.panelVisible,
+      // 关闭时把尺寸恢复成 normal，避免下次打开还停留在放大态
+      panelSize: !state.panelVisible ? state.panelSize : 'normal'
+    }))
+  },
+
+  setPanelSize: (size: AIPanelSize) => {
+    set({ panelSize: size })
   },
 
   regenerateSummary: async () => {

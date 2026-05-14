@@ -5,7 +5,7 @@ import type { TemplateConfig } from '@/types/template'
 export const defaultTemplate: TemplateConfig = {
   name: 'default',
   label: '默认',
-  description: '现代简约风，柔和配色，适合日常阅读',
+  description: '简约配色，日常阅读',
   wrapperClassName: 'p-8 md:p-12',
   components: {
     h1: ({ children, id }) => (
