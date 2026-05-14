@@ -8,15 +8,15 @@
   "settings": {
     "window.title": "noter",
     "explorer.compactFolders": false,
-    "files.exclude": {
-      "**/node_modules": true,
-      "**/.git": true,
-      "**/.commit-pack-init": true,
-      "**/.commitlintrc.json": true,
-      "**/.cz-config.js": true,
-      "**/.czrc": true,
-      "**/.lintstagedrc": true
-    },
+    // "files.exclude": {
+    //   "**/node_modules": true,
+    //   "**/.git": true,
+    //   "**/.commit-pack-init": true,
+    //   "**/.commitlintrc.json": true,
+    //   "**/.cz-config.js": true,
+    //   "**/.czrc": true,
+    //   "**/.lintstagedrc": true
+    // },
     "json.schemaDownload.trustedDomains": { "*": true },
     "editor.inlayHints.enabled": "on",
 

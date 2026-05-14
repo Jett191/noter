@@ -1,0 +1,62 @@
+'use client'
+
+import { Badge } from '@noter/ui/components/badge'
+import type { Document, Tag } from '@/types/document'
+import { Calendar, FileText, Globe, Hash } from 'lucide-react'
+
+interface DocumentMetaProps {
+  document: Document
+}
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hours}:${minutes}`
+}
+
+function formatFileSize(bytes: number | null): string {
+  if (bytes === null || bytes === 0) return '未知'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export default function DocumentMeta({ document }: DocumentMetaProps) {
+  return (
+    <div className='text-muted-foreground flex flex-col gap-3 text-sm'>
+      <div className='flex items-center gap-2'>
+        <Calendar className='h-4 w-4 shrink-0' />
+        <span>创建时间：{formatDate(document.createdAt)}</span>
+      </div>
+
+      <div className='flex items-center gap-2'>
+        <FileText className='h-4 w-4 shrink-0' />
+        <span>文件大小：{formatFileSize(document.fileSize)}</span>
+      </div>
+
+      <div className='flex items-center gap-2'>
+        <Globe className='h-4 w-4 shrink-0' />
+        <span>语言：{document.language || '未知'}</span>
+      </div>
+
+      <div className='flex items-center gap-2'>
+        <Hash className='h-4 w-4 shrink-0' />
+        <span>字数：{document.wordCount.toLocaleString()}</span>
+      </div>
+
+      {document.tags.length > 0 && (
+        <div className='flex flex-wrap items-center gap-1.5 pt-1'>
+          {document.tags.map((tag: Tag) => (
+            <Badge key={tag.id} variant='secondary'>
+              {tag.name}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
