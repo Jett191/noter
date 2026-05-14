@@ -39,10 +39,15 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ id: s
   } = useDocumentDetailStore()
   const folders = useFolderStore((s) => s.folders)
   const fetchFolders = useFolderStore((s) => s.fetchFolders)
+  const stopPolling = useDocumentDetailStore((s) => s.stopPolling)
 
   useEffect(() => {
     fetchDocument(id)
-  }, [id, fetchDocument])
+    // 离开详情页时停止后台轮询
+    return () => {
+      stopPolling()
+    }
+  }, [id, fetchDocument, stopPolling])
 
   // 直接访问详情页时也要确保面包屑能拿到文件夹层级
   useEffect(() => {

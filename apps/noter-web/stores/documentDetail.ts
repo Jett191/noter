@@ -15,6 +15,7 @@ interface DocumentDetailState {
   panelSize: AIPanelSize
   summaryStatus: ProcessingStatus | null
   mindmapStatus: ProcessingStatus | null
+  pollingTimer: ReturnType<typeof setInterval> | null
   fetchDocument: (id: string) => Promise<void>
   setTemplate: (template: TemplateType) => void
   togglePanel: () => void
@@ -23,9 +24,15 @@ interface DocumentDetailState {
   regenerateMindmap: () => Promise<void>
   addTagToDocument: (tag: Tag) => Promise<void>
   removeTagFromDocument: (tagId: string) => Promise<void>
+  stopPolling: () => void
 }
 
 const POLL_INTERVAL = 3000
+// 5 分钟保护：100 次 × 3s。超时后强制结束轮询并标记为 failed
+const MAX_POLL_ATTEMPTS = 100
+
+const isInProgress = (status: ProcessingStatus | null | undefined): boolean =>
+  status === 'pending' || status === 'running'
 
 export const useDocumentDetailStore = create<DocumentDetailState>((set, get) => ({
   document: null,
@@ -36,12 +43,76 @@ export const useDocumentDetailStore = create<DocumentDetailState>((set, get) => 
   panelSize: 'normal',
   summaryStatus: null,
   mindmapStatus: null,
+  pollingTimer: null,
+
+  stopPolling: () => {
+    const { pollingTimer } = get()
+    if (pollingTimer) {
+      clearInterval(pollingTimer)
+      set({ pollingTimer: null })
+    }
+  },
 
   fetchDocument: async (id: string) => {
+    // 切换文档时停止之前的轮询
+    get().stopPolling()
     set({ loading: true, error: null })
     try {
       const doc = await documentApi.getById(id)
-      set({ document: doc, loading: false })
+      set({
+        document: doc,
+        summaryStatus: doc?.summaryStatus ?? null,
+        mindmapStatus: doc?.mindmapStatus ?? null,
+        loading: false
+      })
+
+      // 如果 summary / mindmap 还在生成中，启动轮询
+      if (doc && (isInProgress(doc.summaryStatus) || isInProgress(doc.mindmapStatus))) {
+        let attempts = 0
+        const timer = setInterval(async () => {
+          attempts += 1
+
+          // 超过最大次数：兜底标记 failed，停止轮询
+          if (attempts > MAX_POLL_ATTEMPTS) {
+            const cur = get()
+            set({
+              summaryStatus: isInProgress(cur.summaryStatus) ? 'failed' : cur.summaryStatus,
+              mindmapStatus: isInProgress(cur.mindmapStatus) ? 'failed' : cur.mindmapStatus
+            })
+            get().stopPolling()
+            return
+          }
+
+          try {
+            const status = await documentApi.getStatus(id)
+            if (!status) return
+
+            const summaryStatus = status.summaryStatus as ProcessingStatus
+            const mindmapStatus = status.mindmapStatus as ProcessingStatus
+
+            const prevSummaryStatus = get().summaryStatus
+            const prevMindmapStatus = get().mindmapStatus
+
+            set({ summaryStatus, mindmapStatus })
+
+            // 任意一个从进行中变成 success，重新拉取详情以加载新数据
+            const summaryDone = isInProgress(prevSummaryStatus) && summaryStatus === 'success'
+            const mindmapDone = isInProgress(prevMindmapStatus) && mindmapStatus === 'success'
+            if (summaryDone || mindmapDone) {
+              const fresh = await documentApi.getById(id)
+              if (fresh) set({ document: fresh })
+            }
+
+            // 都已完成（success 或 failed），停止轮询
+            if (!isInProgress(summaryStatus) && !isInProgress(mindmapStatus)) {
+              get().stopPolling()
+            }
+          } catch {
+            // 单次失败不停轮询，下次再试
+          }
+        }, POLL_INTERVAL)
+        set({ pollingTimer: timer })
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : '获取文档失败'
       set({ error: message, loading: false })
@@ -71,10 +142,18 @@ export const useDocumentDetailStore = create<DocumentDetailState>((set, get) => 
     set({ summaryStatus: 'running' })
     try {
       await aiApi.regenerateSummary(document.id)
-      // 轮询状态直到 success 或 failed
+      // 轮询状态直到 success / failed / 超过最大次数
       const poll = (): Promise<void> =>
         new Promise((resolve) => {
+          let attempts = 0
           const timer = setInterval(async () => {
+            attempts += 1
+            if (attempts > MAX_POLL_ATTEMPTS) {
+              clearInterval(timer)
+              set({ summaryStatus: 'failed' })
+              resolve()
+              return
+            }
             try {
               const status = await documentApi.getStatus(document.id)
               if (!status) return
@@ -109,10 +188,18 @@ export const useDocumentDetailStore = create<DocumentDetailState>((set, get) => 
     set({ mindmapStatus: 'running' })
     try {
       await aiApi.regenerateMindmap(document.id)
-      // 轮询状态直到 success 或 failed
+      // 轮询状态直到 success / failed / 超过最大次数
       const poll = (): Promise<void> =>
         new Promise((resolve) => {
+          let attempts = 0
           const timer = setInterval(async () => {
+            attempts += 1
+            if (attempts > MAX_POLL_ATTEMPTS) {
+              clearInterval(timer)
+              set({ mindmapStatus: 'failed' })
+              resolve()
+              return
+            }
             try {
               const status = await documentApi.getStatus(document.id)
               if (!status) return

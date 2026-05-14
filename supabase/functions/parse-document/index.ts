@@ -441,12 +441,14 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Step 10: Update document word count and parse_status to 'success'
+    // Step 10: Update document word count, parse_status='success' and status='ready'
+    // 解析成功即可让用户进入查看，不再等待 vectorize / summary / mindmap
     const wordCount = processedMarkdown.replace(/\s+/g, ' ').trim().length
     await supabase
       .from('documents')
       .update({
         parse_status: 'success',
+        status: 'ready',
         word_count: wordCount,
         updated_at: new Date().toISOString()
       })

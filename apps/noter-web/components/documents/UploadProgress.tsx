@@ -1,23 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
+import { Button } from '@noter/ui/components/button'
+import { cn } from '@noter/ui/lib/utils'
 import { documentApi } from '@/lib/axios/documents'
 
-/** 处理阶段定义 */
-const STEPS = [
-  { key: 'upload', label: '上传完成' },
-  { key: 'parse', label: '解析中' },
-  { key: 'vector', label: '向量化中' },
-  { key: 'ai', label: 'AI 生成中' },
-  { key: 'ready', label: '完成' }
-] as const
-
 type StepStatus = 'pending' | 'running' | 'success' | 'failed'
-
-type StepKey = 'upload' | 'parse' | 'vector' | 'ai' | 'ready'
-
-type StepStatuses = Record<StepKey, StepStatus>
 
 interface UploadProgressProps {
   documentId: string | null
@@ -25,159 +15,212 @@ interface UploadProgressProps {
   uploadError: string | null
 }
 
+interface ProgressState {
+  parse: StepStatus
+  ai: StepStatus
+}
+
+const POLL_INTERVAL = 3000
+const MAX_ATTEMPTS = 100 // 5 分钟保护
+
+// 假进度阶段上限（解析完成前最多走到 90%）
+const FAKE_PROGRESS_CAP = 90
+// 每 tick 推进的步长（接近 cap 时按比例放慢）
+const FAKE_TICK_MS = 200
+
+function mergeAiStatus(summary: StepStatus, mindmap: StepStatus): StepStatus {
+  if (summary === 'failed' || mindmap === 'failed') return 'failed'
+  if (summary === 'success' && mindmap === 'success') return 'success'
+  if (summary === 'running' || mindmap === 'running') return 'running'
+  if (summary === 'success' || mindmap === 'success') return 'running'
+  return 'pending'
+}
+
 export default function UploadProgress({
   documentId,
   uploading,
   uploadError
 }: UploadProgressProps) {
-  const [stepStatuses, setStepStatuses] = useState<StepStatuses>({
-    upload: 'pending',
-    parse: 'pending',
-    vector: 'pending',
-    ai: 'pending',
-    ready: 'pending'
-  })
+  const router = useRouter()
+  const [state, setState] = useState<ProgressState>({ parse: 'pending', ai: 'pending' })
   const [pollError, setPollError] = useState<string | null>(null)
+  const [progress, setProgress] = useState(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const fakeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // 上传阶段状态
-  useEffect(() => {
-    if (uploading) {
-      setStepStatuses((prev) => ({ ...prev, upload: 'running' }))
-    } else if (uploadError) {
-      setStepStatuses((prev) => ({ ...prev, upload: 'failed' }))
-    } else if (documentId) {
-      setStepStatuses((prev) => ({ ...prev, upload: 'success' }))
-    }
-  }, [uploading, uploadError, documentId])
-
-  // 上传成功后轮询状态
   useEffect(() => {
     if (!documentId || uploading || uploadError) return
 
+    let attempts = 0
+
     const poll = async () => {
+      attempts += 1
+
+      if (attempts > MAX_ATTEMPTS) {
+        setState((prev) => ({
+          parse: prev.parse === 'success' || prev.parse === 'failed' ? prev.parse : 'failed',
+          ai: prev.ai === 'success' || prev.ai === 'failed' ? prev.ai : 'failed'
+        }))
+        setPollError('AI 处理超时，请稍后在文档详情页重试')
+        if (intervalRef.current) clearInterval(intervalRef.current)
+        intervalRef.current = null
+        return
+      }
+
       try {
         const res = await documentApi.getStatus(documentId)
         if (!res) return
 
-        const { status, parseStatus, vectorStatus, summaryStatus, mindmapStatus } = res
+        const { parseStatus, summaryStatus, mindmapStatus } = res
+        const parse = parseStatus as StepStatus
+        const ai = mergeAiStatus(summaryStatus as StepStatus, mindmapStatus as StepStatus)
 
-        setStepStatuses((prev) => {
-          const next: StepStatuses = { ...prev, upload: 'success' }
+        setState({ parse, ai })
 
-          // 解析阶段
-          if (parseStatus === 'running') next.parse = 'running'
-          else if (parseStatus === 'success') next.parse = 'success'
-          else if (parseStatus === 'failed') next.parse = 'failed'
-          else next.parse = 'pending'
-
-          // 向量化阶段
-          if (vectorStatus === 'running') next.vector = 'running'
-          else if (vectorStatus === 'success') next.vector = 'success'
-          else if (vectorStatus === 'failed') next.vector = 'failed'
-          else next.vector = 'pending'
-
-          // AI 生成阶段（summary + mindmap 合并展示）
-          if (summaryStatus === 'failed' || mindmapStatus === 'failed') {
-            next.ai = 'failed'
-          } else if (summaryStatus === 'running' || mindmapStatus === 'running') {
-            next.ai = 'running'
-          } else if (summaryStatus === 'success' && mindmapStatus === 'success') {
-            next.ai = 'success'
-          } else if (summaryStatus === 'success' || mindmapStatus === 'success') {
-            next.ai = 'running'
-          } else {
-            next.ai = 'pending'
-          }
-
-          // 整体完成
-          if (status === 'ready') {
-            next.ready = 'success'
-          } else if (status === 'failed') {
-            next.ready = 'failed'
-          } else {
-            next.ready = 'pending'
-          }
-
-          return next
-        })
-
-        // 终止轮询条件
-        if (status === 'ready' || status === 'failed') {
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current)
-            intervalRef.current = null
-          }
+        // 解析和 AI 都终态时停止轮询
+        const parseDone = parse === 'success' || parse === 'failed'
+        const aiDone = ai === 'success' || ai === 'failed'
+        if (parseDone && aiDone) {
+          if (intervalRef.current) clearInterval(intervalRef.current)
+          intervalRef.current = null
         }
       } catch {
         setPollError('状态查询失败，请刷新页面重试')
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current)
-          intervalRef.current = null
-        }
-      }
-    }
-
-    // 立即执行一次
-    poll()
-    intervalRef.current = setInterval(poll, 3000)
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
+        if (intervalRef.current) clearInterval(intervalRef.current)
         intervalRef.current = null
       }
     }
+
+    poll()
+    intervalRef.current = setInterval(poll, POLL_INTERVAL)
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
   }, [documentId, uploading, uploadError])
 
-  const getStepIcon = (status: StepStatus) => {
-    switch (status) {
-      case 'success':
-        return <CheckCircle className='h-4 w-4 text-green-500' />
-      case 'running':
-        return <Loader2 className='h-4 w-4 animate-spin text-blue-500' />
-      case 'failed':
-        return <XCircle className='h-4 w-4 text-red-500' />
-      default:
-        return <div className='border-muted-foreground/30 h-4 w-4 rounded-full border-2' />
+  // ===== 假进度条：持续推进到 cap，关键节点跳转 =====
+  useEffect(() => {
+    // 失败：进度条停在当前位置（不再推进）
+    // 解析完成：停止推进，由派生值 displayProgress 渲染为 100%
+    if (uploadError || state.parse === 'failed' || state.parse === 'success') {
+      if (fakeIntervalRef.current) clearInterval(fakeIntervalRef.current)
+      fakeIntervalRef.current = null
+      return
     }
+
+    // 上传中或解析中：缓慢逼近 cap，越接近越慢，给"在干活"的感觉
+    fakeIntervalRef.current = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= FAKE_PROGRESS_CAP) return prev
+        const remaining = FAKE_PROGRESS_CAP - prev
+        // 每次走剩余距离的 3%，最少 +0.3，自然减速
+        const step = Math.max(0.3, remaining * 0.03)
+        return Math.min(FAKE_PROGRESS_CAP, prev + step)
+      })
+    }, FAKE_TICK_MS)
+
+    return () => {
+      if (fakeIntervalRef.current) clearInterval(fakeIntervalRef.current)
+      fakeIntervalRef.current = null
+    }
+  }, [uploading, uploadError, state.parse])
+
+  // ===== 主状态计算 =====
+  const parseFailed = state.parse === 'failed'
+  const parseReady = state.parse === 'success'
+  const aiSuccess = state.ai === 'success'
+  const aiFailed = state.ai === 'failed'
+
+  // 解析完成后直接派生为 100%，避免在 effect 中同步 setState
+  const displayProgress = parseReady ? 100 : progress
+
+  // 主状态信息
+  let icon: React.ReactNode
+  let title: string
+  let description: string | null = null
+  let tone: 'progress' | 'success' | 'error' = 'progress'
+
+  if (uploadError) {
+    icon = <AlertCircle className='size-6' />
+    title = '上传失败'
+    description = uploadError
+    tone = 'error'
+  } else if (uploading) {
+    icon = <Loader2 className='size-6 animate-spin' />
+    title = '正在上传文件...'
+  } else if (parseFailed) {
+    icon = <AlertCircle className='size-6' />
+    title = '解析失败'
+    description = '文档无法解析，请检查文件格式后重试'
+    tone = 'error'
+  } else if (!parseReady) {
+    icon = <Loader2 className='size-6 animate-spin' />
+    title = '正在解析文档...'
+    description = '解析完成后即可阅读'
+  } else if (aiSuccess) {
+    icon = <CheckCircle2 className='size-6' />
+    title = '处理完成'
+    description = 'AI 总结和思维导图已生成'
+    tone = 'success'
+  } else if (aiFailed) {
+    icon = <CheckCircle2 className='size-6' />
+    title = '文档已就绪'
+    description = 'AI 总结或思维导图生成失败，可在详情页重试'
+    tone = 'success'
+  } else {
+    icon = <CheckCircle2 className='size-6' />
+    title = '文档已就绪'
+    description = 'AI 总结和思维导图后台生成中...'
+    tone = 'success'
   }
 
-  const overallFailed = stepStatuses.ready === 'failed' || uploadError
-  const overallSuccess = stepStatuses.ready === 'success'
+  const canViewDocument = documentId && parseReady && !parseFailed
 
   return (
-    <div className='mt-4 space-y-3'>
-      {/* 步骤列表 */}
-      <div className='space-y-2'>
-        {STEPS.map((step) => (
-          <div key={step.key} className='flex items-center gap-2 text-sm'>
-            {getStepIcon(stepStatuses[step.key])}
-            <span
-              className={
-                stepStatuses[step.key] === 'running'
-                  ? 'text-foreground font-medium'
-                  : stepStatuses[step.key] === 'success'
-                    ? 'text-muted-foreground'
-                    : stepStatuses[step.key] === 'failed'
-                      ? 'text-red-500'
-                      : 'text-muted-foreground/60'
-              }>
-              {step.label}
-            </span>
-          </div>
-        ))}
+    <div className='flex flex-col gap-4 py-2'>
+      {/* 主状态：图标 + 文字 */}
+      <div className='flex items-start gap-3'>
+        <span
+          className={cn(
+            'mt-0.5 shrink-0',
+            tone === 'success' && 'text-green-600',
+            tone === 'error' && 'text-destructive',
+            tone === 'progress' && 'text-primary'
+          )}>
+          {icon}
+        </span>
+        <div className='min-w-0 flex-1 space-y-0.5'>
+          <p className='text-sm font-medium'>{title}</p>
+          {description && <p className='text-muted-foreground text-xs'>{description}</p>}
+          {pollError && <p className='text-destructive text-xs'>{pollError}</p>}
+        </div>
       </div>
 
-      {/* 结果提示 */}
-      {overallSuccess && (
-        <p className='text-sm font-medium text-green-600'>文档处理完成，可以开始阅读了！</p>
+      {/* 进度条 */}
+      <div className='bg-muted h-1 w-full overflow-hidden rounded-full'>
+        <div
+          className={cn(
+            'h-full rounded-full transition-[width] ease-out',
+            // 走到 100% 时用更短动画快速填满，制造"完成"的爽感
+            displayProgress >= 100 ? 'duration-300' : 'duration-200',
+            tone === 'error' ? 'bg-destructive' : 'bg-primary'
+          )}
+          style={{ width: `${displayProgress}%` }}
+        />
+      </div>
+
+      {/* 操作按钮 */}
+      {canViewDocument && (
+        <Button
+          variant='outline'
+          size='sm'
+          className='w-full'
+          onClick={() => router.push(`/documents/${documentId}`)}>
+          立即查看文档
+        </Button>
       )}
-      {overallFailed && !uploadError && (
-        <p className='text-sm text-red-500'>文档处理失败，请稍后重试或联系管理员。</p>
-      )}
-      {uploadError && <p className='text-sm text-red-500'>{uploadError}</p>}
-      {pollError && <p className='text-sm text-red-500'>{pollError}</p>}
     </div>
   )
 }

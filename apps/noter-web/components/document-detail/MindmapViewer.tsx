@@ -90,6 +90,7 @@ export function MindmapViewer({ mindmap }: MindmapViewerProps) {
   const regenerateMindmap = useDocumentDetailStore((s) => s.regenerateMindmap)
 
   const isRunning = mindmapStatus === 'running'
+  const isPending = mindmapStatus === 'pending' || mindmapStatus === 'running'
 
   const { initialNodes, initialEdges } = useMemo(() => {
     if (!mindmap || !mindmap.mindmapJson) {
@@ -105,6 +106,19 @@ export function MindmapViewer({ mindmap }: MindmapViewerProps) {
   const handleRegenerate = useCallback(() => {
     regenerateMindmap()
   }, [regenerateMindmap])
+
+  // 生成中占位（后端正在处理）
+  if ((!mindmap || !mindmap.mindmapJson) && isPending) {
+    return (
+      <div className='flex flex-col gap-2'>
+        <h3 className='text-muted-foreground text-sm font-medium'>思维导图</h3>
+        <div className='border-muted-foreground/30 bg-muted/10 flex h-[400px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed'>
+          <Loader2 className='text-primary h-6 w-6 animate-spin' />
+          <p className='text-muted-foreground text-sm'>AI 正在生成思维导图，请稍候...</p>
+        </div>
+      </div>
+    )
+  }
 
   // Empty state: no mindmap data
   if (!mindmap || !mindmap.mindmapJson) {
