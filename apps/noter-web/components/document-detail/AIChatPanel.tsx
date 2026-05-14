@@ -5,7 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@noter/ui/componen
 import { Button } from '@noter/ui/components/button'
 import { Input } from '@noter/ui/components/input'
 import { ScrollArea } from '@noter/ui/components/scroll-area'
-import { MessageSquare, Send, X, Loader2, Square } from 'lucide-react'
+import { Loader2, MessageSquare, Send, Square, X } from 'lucide-react'
 import { ChatMessage, type ChatMessageProps } from './ChatMessage'
 import { useDocumentDetailStore } from '@/stores/documentDetail'
 
@@ -176,19 +176,7 @@ export function AIChatPanel({ visible, onToggle }: AIChatPanelProps) {
 
   return (
     <>
-      {/* 展开按钮（面板关闭时显示） */}
-      {!visible && (
-        <Button
-          variant='outline'
-          size='sm'
-          onClick={onToggle}
-          className='fixed top-1/2 right-4 z-40 flex -translate-y-1/2 items-center gap-1.5'>
-          <MessageSquare className='h-4 w-4' />
-          <span className='text-xs'>AI 问答</span>
-        </Button>
-      )}
-
-      {/* 右侧面板 */}
+      {/* 右侧面板（展开入口由顶部导航栏控制） */}
       <Sheet open={visible} onOpenChange={onToggle}>
         <SheetContent
           side='right'

@@ -2,15 +2,15 @@
 
 import { useEffect, use } from 'react'
 import { useDocumentDetailStore } from '@/stores/documentDetail'
+import { useFolderStore } from '@/stores/folders'
 import type { Document } from '@/types/document'
 import { DocumentOutline } from '@/components/document-detail/DocumentOutline'
 import DocumentMeta from '@/components/document-detail/DocumentMeta'
 import { TemplateRenderer } from '@/components/document-detail/TemplateRenderer'
-import { TemplateSwitcher } from '@/components/document-detail/TemplateSwitcher'
 import { AIChatPanel } from '@/components/document-detail/AIChatPanel'
 import { MindmapViewer } from '@/components/document-detail/MindmapViewer'
 import { SummaryCard } from '@/components/document-detail/SummaryCard'
-import { DownloadButton } from '@/components/document-detail/DownloadButton'
+import { DocumentDetailHeader } from '@/components/document-detail/DocumentDetailHeader'
 import { ScrollArea } from '@noter/ui/components/scroll-area'
 import { Skeleton } from '@noter/ui/components/skeleton'
 import { Button } from '@noter/ui/components/button'
@@ -27,10 +27,19 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ id: s
     setTemplate,
     togglePanel
   } = useDocumentDetailStore()
+  const folders = useFolderStore((s) => s.folders)
+  const fetchFolders = useFolderStore((s) => s.fetchFolders)
 
   useEffect(() => {
     fetchDocument(id)
   }, [id, fetchDocument])
+
+  // 直接访问详情页时也要确保面包屑能拿到文件夹层级
+  useEffect(() => {
+    if (folders.length === 0) {
+      fetchFolders()
+    }
+  }, [folders.length, fetchFolders])
 
   // 加载中骨架屏
   if (loading) {
@@ -77,42 +86,48 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ id: s
   const mindmap = docWithRelations.mindmap ?? null
 
   return (
-    <div className='flex justify-center gap-6 p-6'>
-      {/* 左侧：大纲 */}
-      <aside className='sticky top-28 h-[calc(100vh-262px)] w-56 shrink-0'>
-        <ScrollArea className='h-full'>
-          <DocumentOutline outline={content?.outline ?? null} />
-        </ScrollArea>
-      </aside>
+    <div className='flex min-h-screen flex-col'>
+      {/* 顶部导航栏：返回 / 面包屑 / 模板切换 / 下载 / AI */}
+      <DocumentDetailHeader
+        document={document}
+        template={template}
+        onTemplateChange={setTemplate}
+        panelVisible={panelVisible}
+        onTogglePanel={togglePanel}
+      />
 
-      {/* 中间：正文 + 思维导图 + 总结 */}
-      <main className='max-w-4xl min-w-0 flex-1 space-y-8'>
-        {/* 顶部工具栏 */}
-        <div className='flex items-center justify-between'>
-          <TemplateSwitcher template={template} onTemplateChange={setTemplate} />
-          <DownloadButton title={document!.title} />
-        </div>
+      {/* 主体三栏布局 */}
+      <div className='flex flex-1 justify-center gap-6 p-6'>
+        {/* 左侧：大纲 */}
+        <aside className='sticky top-20 h-[calc(100vh-6.5rem)] w-56 shrink-0'>
+          <ScrollArea className='h-full'>
+            <DocumentOutline outline={content?.outline ?? null} />
+          </ScrollArea>
+        </aside>
 
-        {/* 文档正文 */}
-        {content?.markdownContent ? (
-          <TemplateRenderer markdownContent={content.markdownContent} template={template} />
-        ) : (
-          <div className='text-muted-foreground py-12 text-center'>文档内容加载中...</div>
-        )}
+        {/* 中间：正文 + 思维导图 + 总结 */}
+        <main className='max-w-4xl min-w-0 flex-1 space-y-8'>
+          {/* 文档正文 */}
+          {content?.markdownContent ? (
+            <TemplateRenderer markdownContent={content.markdownContent} template={template} />
+          ) : (
+            <div className='text-muted-foreground py-12 text-center'>文档内容加载中...</div>
+          )}
 
-        {/* 思维导图 */}
-        <MindmapViewer mindmap={mindmap} />
+          {/* 思维导图 */}
+          <MindmapViewer mindmap={mindmap} />
 
-        {/* AI 总结 */}
-        <SummaryCard summary={summary} />
-      </main>
+          {/* AI 总结 */}
+          <SummaryCard summary={summary} />
+        </main>
 
-      {/* 右侧：文档元信息 */}
-      <aside className='sticky top-28 h-fit w-52 shrink-0'>
-        <DocumentMeta document={document!} />
-      </aside>
+        {/* 右侧：文档元信息 */}
+        <aside className='sticky top-20 h-fit w-52 shrink-0'>
+          <DocumentMeta document={document} />
+        </aside>
+      </div>
 
-      {/* AI 问答面板（可隐藏） */}
+      {/* AI 问答面板（由顶部 AI 按钮控制） */}
       <AIChatPanel visible={panelVisible} onToggle={togglePanel} />
     </div>
   )

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useDocumentStore } from '@/stores/document'
 import { useTagStore } from '@/stores/tags'
 import { useFolderStore } from '@/stores/folders'
@@ -11,6 +12,7 @@ import DocumentGrid from '@/components/documents/DocumentGrid'
 import { UploadDialog } from '@/components/documents/UploadDialog'
 import { UserAvatarDropdown } from '@/components/documents/UserAvatarDropdown'
 import { TagFilterList } from '@/components/documents/side-panel/TagFilterList'
+import { TagManager } from '@/components/documents/side-panel/TagManager'
 import { Button } from '@noter/ui/components/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@noter/ui/components/card'
 import { Separator } from '@noter/ui/components/separator'
@@ -31,7 +33,18 @@ export default function DocumentsPage() {
     reset
   } = useDocumentStore()
   const { fetchTags } = useTagStore()
-  const { fetchFolders, selectedFolderId } = useFolderStore()
+  const { fetchFolders, selectedFolderId, setSelectedFolder } = useFolderStore()
+
+  const searchParams = useSearchParams()
+  const folderIdParam = searchParams.get('folderId')
+
+  // 当从外部带 folderId 进入时，同步到 store
+  useEffect(() => {
+    const next = folderIdParam || null
+    if (next !== selectedFolderId) {
+      setSelectedFolder(next)
+    }
+  }, [folderIdParam, selectedFolderId, setSelectedFolder])
 
   useEffect(() => {
     fetchDocuments()
@@ -110,14 +123,16 @@ export default function DocumentsPage() {
         />
       </div>
 
-      {/* 右侧标签筛选 */}
-      <aside className='w-52 shrink-0 border-l p-4'>
+      {/* 右侧标签筛选 + 标签管理 */}
+      <aside className='w-56 shrink-0 space-y-4 border-l p-4'>
         <Card className='sticky top-4'>
           <CardHeader className='px-3 py-3'>
             <CardTitle className='text-sm'>标签筛选</CardTitle>
           </CardHeader>
-          <CardContent className='px-3 pb-3'>
+          <CardContent className='space-y-4 px-3 pb-3'>
             <TagFilterList />
+            <Separator />
+            <TagManager />
           </CardContent>
         </Card>
       </aside>

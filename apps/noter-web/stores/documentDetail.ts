@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { documentApi } from '@/lib/axios/documents'
+import { tagApi } from '@/lib/axios/tags'
 import { aiApi } from '@/lib/axios/ai'
-import type { Document, TemplateType, ProcessingStatus } from '@/types/document'
+import type { Document, Tag, TemplateType, ProcessingStatus } from '@/types/document'
 
 interface DocumentDetailState {
   document: Document | null
@@ -16,6 +17,8 @@ interface DocumentDetailState {
   togglePanel: () => void
   regenerateSummary: () => Promise<void>
   regenerateMindmap: () => Promise<void>
+  addTagToDocument: (tag: Tag) => Promise<void>
+  removeTagFromDocument: (tagId: string) => Promise<void>
 }
 
 const POLL_INTERVAL = 3000
@@ -121,6 +124,39 @@ export const useDocumentDetailStore = create<DocumentDetailState>((set, get) => 
       await poll()
     } catch {
       set({ mindmapStatus: 'failed' })
+    }
+  },
+
+  addTagToDocument: async (tag: Tag) => {
+    const { document } = get()
+    if (!document) return
+    if (document.tags.some((t) => t.id === tag.id)) return
+
+    // 乐观更新
+    const previous = document.tags
+    set({ document: { ...document, tags: [...previous, tag] } })
+
+    try {
+      await tagApi.addToDocument(document.id, tag.id)
+    } catch (err) {
+      // 回滚
+      set({ document: { ...document, tags: previous } })
+      throw err
+    }
+  },
+
+  removeTagFromDocument: async (tagId: string) => {
+    const { document } = get()
+    if (!document) return
+
+    const previous = document.tags
+    set({ document: { ...document, tags: previous.filter((t) => t.id !== tagId) } })
+
+    try {
+      await tagApi.removeFromDocument(document.id, tagId)
+    } catch (err) {
+      set({ document: { ...document, tags: previous } })
+      throw err
     }
   }
 }))

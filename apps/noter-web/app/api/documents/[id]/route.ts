@@ -141,6 +141,7 @@ export const GET = handler(async (_request: Request, { params }: RouteContext) =
     isFavorite: document.is_favorite,
     isArchived: document.is_archived,
     deleted: document.deleted,
+    folderId: document.folder_id,
     tags,
     content,
     summary,
