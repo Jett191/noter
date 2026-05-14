@@ -9,12 +9,16 @@ interface DocumentState {
   page: number
   pageSize: number
   loading: boolean
+  loadingMore: boolean
   error: string | null
   selectedTags: string[]
+  hasMore: boolean
   setPage: (page: number) => void
   setPageSize: (size: number) => void
   setSelectedTags: (tags: string[]) => void
   fetchDocuments: () => Promise<void>
+  loadMore: () => Promise<void>
+  reset: () => void
 }
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
@@ -23,8 +27,10 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   page: 1,
   pageSize: 10,
   loading: false,
+  loadingMore: false,
   error: null,
   selectedTags: [],
+  hasMore: false,
 
   setPage: (page) => {
     set({ page })
@@ -32,12 +38,17 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   setPageSize: (pageSize) => {
-    set({ pageSize, page: 1 })
+    set({ pageSize, page: 1, documents: [] })
     get().fetchDocuments()
   },
 
   setSelectedTags: (selectedTags) => {
-    set({ selectedTags, page: 1 })
+    set({ selectedTags, page: 1, documents: [] })
+    get().fetchDocuments()
+  },
+
+  reset: () => {
+    set({ page: 1, documents: [] })
     get().fetchDocuments()
   },
 
@@ -54,15 +65,49 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         orderBy: 'created_at',
         order: 'desc'
       })
+      const items = result?.items ?? []
+      const total = result?.total ?? 0
       set({
-        documents: result?.items ?? [],
-        total: result?.total ?? 0,
+        documents: items,
+        total,
+        hasMore: page * pageSize < total,
         loading: false
       })
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : '加载文档列表失败',
         loading: false
+      })
+    }
+  },
+
+  loadMore: async () => {
+    const { page, pageSize, selectedTags, documents } = get()
+    const { selectedFolderId } = useFolderStore.getState()
+    const nextPage = page + 1
+    set({ loadingMore: true, error: null })
+    try {
+      const result = await documentApi.list({
+        page: nextPage,
+        pageSize,
+        tagIds: selectedTags.length > 0 ? selectedTags : undefined,
+        folderId: selectedFolderId ?? undefined,
+        orderBy: 'created_at',
+        order: 'desc'
+      })
+      const items = result?.items ?? []
+      const total = result?.total ?? 0
+      set({
+        documents: [...documents, ...items],
+        total,
+        page: nextPage,
+        hasMore: nextPage * pageSize < total,
+        loadingMore: false
+      })
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : '加载更多失败',
+        loadingMore: false
       })
     }
   }

@@ -52,7 +52,7 @@ export const POST = handler(async (request: Request) => {
   // 获取公开 URL
   const { data: urlData } = supabase.storage.from('userResources').getPublicUrl(storagePath)
 
-  const avatarUrl = urlData.publicUrl
+  const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`
 
   // 更新用户 metadata
   const { error: updateError } = await supabase.auth.updateUser({

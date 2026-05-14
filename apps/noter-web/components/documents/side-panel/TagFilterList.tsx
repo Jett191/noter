@@ -17,9 +17,7 @@ export function TagFilterList() {
   }
 
   return (
-    <div className='space-y-3'>
-      <h3 className='text-sm font-medium'>标签筛选</h3>
-
+    <div className='flex flex-col gap-1.5'>
       <div className='flex flex-wrap gap-1.5'>
         {tags.map((tag) => {
           const isSelected = selectedTags.includes(tag.id)

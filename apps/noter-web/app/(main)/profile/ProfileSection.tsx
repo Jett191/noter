@@ -101,7 +101,11 @@ export function ProfileSection() {
         <div className='flex items-center gap-5'>
           <div className='relative'>
             <Avatar className='size-20'>
-              {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.username} />}
+              <AvatarImage
+                src={user.avatarUrl ?? undefined}
+                alt={user.username}
+                referrerPolicy='no-referrer'
+              />
               <AvatarFallback className='text-xl'>{fallbackChar}</AvatarFallback>
             </Avatar>
             <button

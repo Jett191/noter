@@ -36,18 +36,20 @@ export function UserAvatarDropdown() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className='cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring'>
+      <DropdownMenuTrigger className='focus-visible:ring-ring cursor-pointer rounded-full outline-none focus-visible:ring-2'>
         <Avatar className='size-9'>
-          {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={displayName} />}
+          <AvatarImage
+            src={user.avatarUrl ?? undefined}
+            alt={displayName}
+            referrerPolicy='no-referrer'
+          />
           <AvatarFallback>{fallbackChar}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-56'>
         <DropdownMenuLabel className='flex flex-col gap-1'>
           <span className='truncate text-sm font-medium'>{user.username}</span>
-          <span className='truncate text-xs font-normal text-muted-foreground'>
-            {user.email}
-          </span>
+          <span className='text-muted-foreground truncate text-xs font-normal'>{user.email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>

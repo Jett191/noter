@@ -1,5 +1,5 @@
 {
-  "workspace": ["./apps/noter-server"],
+  "workspace": ["./apps/noter-agent"],
   "fmt": {
     "semiColons": true,
     "singleQuote": false

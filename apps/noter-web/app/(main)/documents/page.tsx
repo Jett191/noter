@@ -8,17 +8,28 @@ import { SearchBar } from '@/components/documents/SearchBar'
 import { FilterSortBar } from '@/components/documents/FilterSortBar'
 import { FolderSidebar } from '@/components/documents/FolderSidebar'
 import DocumentGrid from '@/components/documents/DocumentGrid'
-import { PaginationController } from '@/components/documents/PaginationController'
 import { UploadDialog } from '@/components/documents/UploadDialog'
 import { UserAvatarDropdown } from '@/components/documents/UserAvatarDropdown'
+import { TagFilterList } from '@/components/documents/side-panel/TagFilterList'
 import { Button } from '@noter/ui/components/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@noter/ui/components/card'
 import { Separator } from '@noter/ui/components/separator'
+import { Spinner } from '@noter/ui/components/spinner'
 import { Upload } from 'lucide-react'
 
 export default function DocumentsPage() {
   const [uploadOpen, setUploadOpen] = useState(false)
-  const { documents, total, page, pageSize, loading, error, fetchDocuments } = useDocumentStore()
-  const { setPage, setPageSize } = useDocumentStore()
+  const {
+    documents,
+    total,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    fetchDocuments,
+    loadMore,
+    reset
+  } = useDocumentStore()
   const { fetchTags } = useTagStore()
   const { fetchFolders, selectedFolderId } = useFolderStore()
 
@@ -30,8 +41,8 @@ export default function DocumentsPage() {
 
   // 当选中文件夹变化时重新获取文档
   useEffect(() => {
-    fetchDocuments()
-  }, [selectedFolderId, fetchDocuments])
+    reset()
+  }, [selectedFolderId, reset])
 
   return (
     <div className='flex h-full'>
@@ -40,8 +51,8 @@ export default function DocumentsPage() {
         <FolderSidebar />
       </aside>
 
-      {/* 右侧主内容 */}
-      <div className='flex-1 p-6'>
+      {/* 中间主内容 */}
+      <div className='flex-1 overflow-y-auto p-6'>
         {/* 顶部：搜索 + 上传 + 用户头像 */}
         <div className='mb-4 flex items-center gap-4'>
           <SearchBar />
@@ -75,23 +86,41 @@ export default function DocumentsPage() {
           onUpload={() => setUploadOpen(true)}
         />
 
-        {/* 分页 */}
-        {total > 0 && (
-          <PaginationController
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
+        {/* 加载更多 */}
+        {hasMore && !loading && (
+          <div className='flex justify-center py-6'>
+            <Button variant='outline' onClick={loadMore} disabled={loadingMore}>
+              {loadingMore && <Spinner data-icon='inline-start' />}
+              {loadingMore ? '加载中...' : `加载更多（共 ${total} 篇）`}
+            </Button>
+          </div>
+        )}
+
+        {/* 已加载全部提示 */}
+        {!hasMore && documents.length > 0 && !loading && (
+          <p className='text-muted-foreground py-6 text-center text-sm'>
+            已显示全部 {total} 篇文档
+          </p>
         )}
 
         <UploadDialog
           open={uploadOpen}
           onOpenChange={setUploadOpen}
-          onUploadComplete={() => fetchDocuments()}
+          onUploadComplete={() => reset()}
         />
       </div>
+
+      {/* 右侧标签筛选 */}
+      <aside className='w-52 shrink-0 border-l p-4'>
+        <Card className='sticky top-4'>
+          <CardHeader className='px-3 py-3'>
+            <CardTitle className='text-sm'>标签筛选</CardTitle>
+          </CardHeader>
+          <CardContent className='px-3 pb-3'>
+            <TagFilterList />
+          </CardContent>
+        </Card>
+      </aside>
     </div>
   )
 }

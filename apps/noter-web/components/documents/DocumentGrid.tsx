@@ -29,8 +29,8 @@ function SkeletonCard() {
 export default function DocumentGrid({ documents, loading, onUpload }: DocumentGridProps) {
   if (loading) {
     return (
-      <div className='grid grid-cols-3 gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'>
-        {Array.from({ length: 12 }).map((_, i) => (
+      <div className='grid grid-cols-5 gap-2'>
+        {Array.from({ length: 10 }).map((_, i) => (
           <SkeletonCard key={i} />
         ))}
       </div>
@@ -42,7 +42,7 @@ export default function DocumentGrid({ documents, loading, onUpload }: DocumentG
   }
 
   return (
-    <div className='grid grid-cols-3 gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'>
+    <div className='grid grid-cols-5 gap-2'>
       {documents.map((doc) => (
         <DocumentCard key={doc.id} document={doc} />
       ))}
