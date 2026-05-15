@@ -1,9 +1,12 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Card } from '@noter/ui/components/card'
 import { Badge } from '@noter/ui/components/badge'
 import type { Document } from '@/types/document'
+import { DocumentCardMenu } from './DocumentCardMenu'
+import { getCustomCover } from '@/utils/feature/documents/cover'
 
 interface DocumentCardProps {
   document: Document
@@ -17,8 +20,8 @@ const COVERS = [
   '/covers/yellow.svg'
 ] as const
 
-/** 根据文档 ID 计算稳定 hash，让同一文档每次都拿到同一张封面 */
-function pickCover(id: string): string {
+/** 根据文档 ID 计算稳定 hash，让同一文档每次都拿到同一张默认封面 */
+function pickDefaultCover(id: string): string {
   let hash = 0
   for (let i = 0; i < id.length; i++) {
     hash = (hash * 31 + id.charCodeAt(i)) | 0
@@ -45,7 +48,24 @@ export default function DocumentCard({ document }: DocumentCardProps) {
   const displayTitle = truncate(document.title, 50)
   const visibleTags = document.tags.slice(0, 3)
   const extraTagCount = document.tags.length - 3
-  const cover = pickCover(document.id)
+  const defaultCover = pickDefaultCover(document.id)
+  const [cover, setCover] = useState<string>(defaultCover)
+
+  // 客户端挂载后读取自定义封面，并监听更新事件
+  useEffect(() => {
+    const sync = () => {
+      const custom = getCustomCover(document.id)
+      setCover(custom ?? defaultCover)
+    }
+    sync()
+
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ documentId: string }>).detail
+      if (detail?.documentId === document.id) sync()
+    }
+    window.addEventListener('noter:cover-updated', handler)
+    return () => window.removeEventListener('noter:cover-updated', handler)
+  }, [document.id, defaultCover])
 
   return (
     <Link href={`/documents/${document.id}`} className='block'>
@@ -57,15 +77,18 @@ export default function DocumentCard({ document }: DocumentCardProps) {
           aria-hidden
         />
 
+        {/* 左上角操作按钮 */}
+        <div className='absolute top-1.5 left-1.5 z-10'>
+          <DocumentCardMenu documentId={document.id} />
+        </div>
+
         {/* 底部文字区毛玻璃面板：仅覆盖文字区域，顶部羽化过渡 */}
         <div
           className='absolute inset-x-0 bottom-0 backdrop-blur-md backdrop-saturate-150'
           style={{
             paddingTop: '8px',
-            // 顶边羽化：从透明到不透明，避免硬边
             WebkitMaskImage: 'linear-gradient(to top, black 70%, transparent 100%)',
             maskImage: 'linear-gradient(to top, black 70%, transparent 100%)',
-            // 半透明白底，让文字浮在玻璃上
             backgroundColor: 'rgba(255,255,255,0.35)'
           }}
           aria-hidden>
@@ -85,7 +108,7 @@ export default function DocumentCard({ document }: DocumentCardProps) {
           </div>
         </div>
 
-        {/* 文字内容（绝对定位到底部，与玻璃层重合） */}
+        {/* 文字内容 */}
         <div className='absolute inset-x-0 bottom-0 flex flex-col gap-1.5 p-3'>
           <h3
             className='line-clamp-2 text-sm leading-snug font-semibold text-gray-900'

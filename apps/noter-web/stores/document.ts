@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { documentApi } from '@/lib/axios/documents'
 import { useFolderStore } from '@/stores/folders'
+import { removeCustomCover } from '@/utils/feature/documents/cover'
 import type { Document } from '@/types/document'
 
 interface DocumentState {
@@ -19,6 +20,7 @@ interface DocumentState {
   fetchDocuments: () => Promise<void>
   loadMore: () => Promise<void>
   reset: () => void
+  deleteDocument: (id: string) => Promise<void>
 }
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
@@ -109,6 +111,25 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         error: err instanceof Error ? err.message : '加载更多失败',
         loadingMore: false
       })
+    }
+  },
+
+  deleteDocument: async (id: string) => {
+    const { documents, total } = get()
+    // 乐观更新：先从列表移除，失败再回滚
+    const previous = documents
+    set({
+      documents: documents.filter((d) => d.id !== id),
+      total: Math.max(0, total - 1)
+    })
+    try {
+      await documentApi.delete(id)
+      // 删除文档时一并清理本地自定义封面
+      removeCustomCover(id)
+    } catch (err) {
+      // 回滚
+      set({ documents: previous, total })
+      throw err
     }
   }
 }))
