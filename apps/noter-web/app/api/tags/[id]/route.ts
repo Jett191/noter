@@ -34,13 +34,13 @@ export const DELETE = handler(
       return error('标签不存在', 404)
     }
 
-    // 解除文档关联（软删除 document_tags 中的关联记录）
+    // 解除该标签与所有文档的关联（硬删除关联记录）
+    // document_tags 表 RLS 没有 UPDATE 策略，必须真删除
     const { error: unlinkError } = await supabase
       .from('document_tags')
-      .update({ deleted: 1 })
+      .delete()
       .eq('tag_id', id)
       .eq('user_id', user.id)
-      .eq('deleted', 0)
 
     if (unlinkError) {
       return error(unlinkError.message, 500)

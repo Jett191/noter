@@ -4,8 +4,13 @@ import { useState } from 'react'
 import { Button } from '@noter/ui/components/button'
 import { Badge } from '@noter/ui/components/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@noter/ui/components/popover'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@noter/ui/components/select'
-import { Separator } from '@noter/ui/components/separator'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@noter/ui/components/select'
 import { ListFilter, ArrowUpDown, X } from 'lucide-react'
 import { useTagStore } from '@/stores/tags'
 import { useDocumentStore } from '@/stores/document'
@@ -56,7 +61,7 @@ export function FilterSortBar() {
   const sortLabel: Record<SortField, string> = {
     created_at: '创建时间',
     title: '标题',
-    file_size: '文件大小',
+    file_size: '文件大小'
   }
 
   return (
@@ -87,9 +92,7 @@ export function FilterSortBar() {
                   className='hover:bg-accent flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm transition-colors'
                   onClick={() => addTagFilter(tag.id)}>
                   <span>{tag.name}</span>
-                  {selectedTags.includes(tag.id) && (
-                    <span className='text-primary text-xs'>✓</span>
-                  )}
+                  {selectedTags.includes(tag.id) && <span className='text-primary text-xs'>✓</span>}
                 </button>
               ))
             )}
@@ -121,13 +124,10 @@ export function FilterSortBar() {
                   className={`hover:bg-accent flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm transition-colors ${sortField === field ? 'bg-accent' : ''}`}
                   onClick={() => handleSortChange(field, sortOrder)}>
                   <span>{sortLabel[field]}</span>
-                  {sortField === field && (
-                    <span className='text-primary text-xs'>✓</span>
-                  )}
+                  {sortField === field && <span className='text-primary text-xs'>✓</span>}
                 </button>
               ))}
             </div>
-            <Separator />
             <div className='space-y-1'>
               <p className='text-muted-foreground px-2 py-1 text-[11px] font-medium uppercase'>
                 排序方向
@@ -159,12 +159,8 @@ export function FilterSortBar() {
       {/* 活跃筛选条件 */}
       {activeFilters.length > 0 && (
         <>
-          <Separator orientation='vertical' className='mx-1 h-4' />
           {activeFilters.map((filter) => (
-            <Badge
-              key={filter.tagId}
-              variant='secondary'
-              className='h-5 gap-1 pr-1 text-[10px]'>
+            <Badge key={filter.tagId} variant='secondary' className='h-5 gap-1 pr-1 text-[10px]'>
               {filter.tagName}
               <button
                 type='button'

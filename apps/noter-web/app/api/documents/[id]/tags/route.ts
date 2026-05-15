@@ -31,7 +31,7 @@ export const POST = handler(async (request: Request, { params }: RouteContext) =
     .eq('id', id)
     .eq('user_id', user.id)
     .eq('deleted', 0)
-    .single()
+    .maybeSingle()
 
   if (docError || !document) {
     return error('文档不存在', 404)
@@ -54,30 +54,17 @@ export const POST = handler(async (request: Request, { params }: RouteContext) =
     return error('标签不存在', 404)
   }
 
-  // 查询是否已有关联记录（包含已软删除的）
+  // 检查是否已关联（document_tags 用真删除，存在即代表当前已关联）
   const { data: existing } = await supabase
     .from('document_tags')
-    .select('id, deleted')
+    .select('id')
     .eq('document_id', id)
     .eq('tag_id', tagId)
     .eq('user_id', user.id)
     .maybeSingle()
 
   if (existing) {
-    if (existing.deleted === 0) {
-      return error('标签已关联', 400)
-    }
-    // 复用已软删除的关联：恢复
-    const { error: updateError } = await supabase
-      .from('document_tags')
-      .update({ deleted: 0 })
-      .eq('id', existing.id)
-
-    if (updateError) {
-      return error(updateError.message, 500)
-    }
-
-    return success(null, '标签添加成功')
+    return error('标签已关联', 400)
   }
 
   // 插入关联记录

@@ -81,18 +81,46 @@ export const POST = handler(async (request: Request) => {
   const body = await request.json()
   const { name } = createTagSchema.parse(body)
 
-  // 检查标签名是否已存在
+  // 唯一约束 (user_id, name) 不区分 deleted，所以查同名记录时不能加 deleted=0
+  // 否则用户创建过又删除的同名标签会触发 23505 唯一冲突
   const { data: existing } = await supabase
     .from('tags')
-    .select('id')
+    .select('id, name, color, description, deleted, created_at, updated_at')
     .eq('user_id', user.id)
     .eq('name', name)
-    .eq('deleted', 0)
-    .limit(1)
-    .single()
+    .maybeSingle()
 
   if (existing) {
-    return error('标签名称已存在', 400)
+    if (existing.deleted === 0) {
+      return error('标签名称已存在', 400)
+    }
+
+    // 复活软删除的标签
+    const { data: revived, error: reviveError } = await supabase
+      .from('tags')
+      .update({ deleted: 0 })
+      .eq('id', existing.id)
+      .eq('user_id', user.id)
+      .select('id, name, color, description, created_at, updated_at')
+      .single()
+
+    if (reviveError || !revived) {
+      return error(reviveError?.message ?? '复活标签失败', 500)
+    }
+
+    return success(
+      {
+        id: revived.id,
+        name: revived.name,
+        color: revived.color,
+        description: revived.description,
+        documentCount: 0,
+        createdAt: revived.created_at,
+        updatedAt: revived.updated_at
+      },
+      '创建标签成功',
+      201
+    )
   }
 
   // 创建标签

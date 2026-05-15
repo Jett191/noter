@@ -32,16 +32,6 @@ function truncate(text: string, maxLength: number): string {
   return text.slice(0, maxLength) + '…'
 }
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  return `${year}-${month}-${day} ${hours}:${minutes}`
-}
-
 export default function DocumentCard({ document }: DocumentCardProps) {
   const displayTitle = truncate(document.title, 50)
   const visibleTags = document.tags.slice(0, 3)
@@ -86,7 +76,6 @@ export default function DocumentCard({ document }: DocumentCardProps) {
                 ))}
               </div>
             )}
-            <time className='text-[10px]'>{formatDate(document.createdAt)}</time>
           </div>
         </div>
 
@@ -112,7 +101,6 @@ export default function DocumentCard({ document }: DocumentCardProps) {
               )}
             </div>
           )}
-          <time className='text-[10px] text-gray-700'>{formatDate(document.createdAt)}</time>
         </div>
       </Card>
     </Link>

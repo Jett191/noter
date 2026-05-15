@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { documentApi } from '@/lib/axios/documents'
 import { tagApi } from '@/lib/axios/tags'
 import { aiApi } from '@/lib/axios/ai'
+import { useTagStore } from '@/stores/tags'
+import { useDocumentStore } from '@/stores/document'
 import type { Document, Tag, TemplateType, ProcessingStatus } from '@/types/document'
 
 export type AIPanelSize = 'normal' | 'tall' | 'wide'
@@ -238,6 +240,8 @@ export const useDocumentDetailStore = create<DocumentDetailState>((set, get) => 
 
     try {
       await tagApi.addToDocument(document.id, tag.id)
+      // 同步全局标签列表（新建的标签需要立即出现在筛选面板）
+      await useTagStore.getState().fetchTags()
     } catch (err) {
       // 回滚
       set({ document: { ...document, tags: previous } })
@@ -253,7 +257,16 @@ export const useDocumentDetailStore = create<DocumentDetailState>((set, get) => 
     set({ document: { ...document, tags: previous.filter((t) => t.id !== tagId) } })
 
     try {
-      await tagApi.removeFromDocument(document.id, tagId)
+      const result = await tagApi.removeFromDocument(document.id, tagId)
+      // 后端会在标签不再被任何文档使用时级联软删除标签实体
+      // tagDeleted=true 时同步刷新筛选面板，并从已选筛选条件里剔除该标签
+      if (result?.tagDeleted) {
+        const docStore = useDocumentStore.getState()
+        if (docStore.selectedTags.includes(tagId)) {
+          docStore.setSelectedTags(docStore.selectedTags.filter((id) => id !== tagId))
+        }
+        await useTagStore.getState().fetchTags()
+      }
     } catch (err) {
       set({ document: { ...document, tags: previous } })
       throw err

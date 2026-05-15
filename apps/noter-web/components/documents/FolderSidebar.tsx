@@ -41,9 +41,11 @@ export function FolderSidebar() {
   }
 
   return (
-    <div className='w-52 shrink-0 space-y-1'>
+    <div className='space-y-1'>
       <div className='flex items-center justify-between px-2 py-1'>
-        <span className='text-muted-foreground text-xs font-medium uppercase tracking-wider'>文件夹</span>
+        <span className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
+          文件夹
+        </span>
         <Button
           variant='ghost'
           size='sm'
@@ -105,7 +107,7 @@ export function FolderSidebar() {
                 <Button
                   variant='ghost'
                   size='sm'
-                  className='absolute right-1 top-1/2 h-5 w-5 -translate-y-1/2 p-0 opacity-0 transition-opacity group-hover:opacity-100'>
+                  className='absolute top-1/2 right-1 h-5 w-5 -translate-y-1/2 p-0 opacity-0 transition-opacity group-hover:opacity-100'>
                   <MoreHorizontal className='h-3 w-3' />
                 </Button>
               </PopoverTrigger>
