@@ -1,12 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Card } from '@noter/ui/components/card'
 import { Badge } from '@noter/ui/components/badge'
 import type { Document } from '@/types/document'
 import { DocumentCardMenu } from './DocumentCardMenu'
-import { getCustomCover } from '@/utils/feature/documents/cover'
 
 interface DocumentCardProps {
   document: Document
@@ -48,24 +46,8 @@ export default function DocumentCard({ document }: DocumentCardProps) {
   const displayTitle = truncate(document.title, 50)
   const visibleTags = document.tags.slice(0, 3)
   const extraTagCount = document.tags.length - 3
-  const defaultCover = pickDefaultCover(document.id)
-  const [cover, setCover] = useState<string>(defaultCover)
-
-  // 客户端挂载后读取自定义封面，并监听更新事件
-  useEffect(() => {
-    const sync = () => {
-      const custom = getCustomCover(document.id)
-      setCover(custom ?? defaultCover)
-    }
-    sync()
-
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ documentId: string }>).detail
-      if (detail?.documentId === document.id) sync()
-    }
-    window.addEventListener('noter:cover-updated', handler)
-    return () => window.removeEventListener('noter:cover-updated', handler)
-  }, [document.id, defaultCover])
+  const cover = document.coverUrl ?? pickDefaultCover(document.id)
+  const hasCustomCover = !!document.coverUrl
 
   return (
     <Link href={`/documents/${document.id}`} className='block'>
@@ -79,7 +61,7 @@ export default function DocumentCard({ document }: DocumentCardProps) {
 
         {/* 左上角操作按钮 */}
         <div className='absolute top-1.5 left-1.5 z-10'>
-          <DocumentCardMenu documentId={document.id} />
+          <DocumentCardMenu documentId={document.id} hasCustomCover={hasCustomCover} />
         </div>
 
         {/* 底部文字区毛玻璃面板：仅覆盖文字区域，顶部羽化过渡 */}

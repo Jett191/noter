@@ -134,6 +134,7 @@ export const GET = handler(async (request: Request) => {
     isArchived: doc.is_archived,
     deleted: doc.deleted,
     folderId: doc.folder_id ?? null,
+    coverUrl: doc.cover_url ?? null,
     tags: tagsMap[doc.id] ?? [],
     createdAt: doc.created_at,
     updatedAt: doc.updated_at

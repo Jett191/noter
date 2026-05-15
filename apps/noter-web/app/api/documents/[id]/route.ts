@@ -142,6 +142,7 @@ export const GET = handler(async (_request: Request, { params }: RouteContext) =
     isArchived: document.is_archived,
     deleted: document.deleted,
     folderId: document.folder_id,
+    coverUrl: document.cover_url ?? null,
     tags,
     content,
     summary,

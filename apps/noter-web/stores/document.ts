@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { documentApi } from '@/lib/axios/documents'
 import { useFolderStore } from '@/stores/folders'
-import { removeCustomCover } from '@/utils/feature/documents/cover'
 import type { Document } from '@/types/document'
 
 interface DocumentState {
@@ -21,6 +20,8 @@ interface DocumentState {
   loadMore: () => Promise<void>
   reset: () => void
   deleteDocument: (id: string) => Promise<void>
+  uploadCover: (id: string, file: File) => Promise<void>
+  resetCover: (id: string) => Promise<void>
 }
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
@@ -124,12 +125,25 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     })
     try {
       await documentApi.delete(id)
-      // 删除文档时一并清理本地自定义封面
-      removeCustomCover(id)
     } catch (err) {
       // 回滚
       set({ documents: previous, total })
       throw err
     }
+  },
+
+  uploadCover: async (id: string, file: File) => {
+    const result = await documentApi.uploadCover(id, file)
+    if (!result?.coverUrl) return
+    set({
+      documents: get().documents.map((d) => (d.id === id ? { ...d, coverUrl: result.coverUrl } : d))
+    })
+  },
+
+  resetCover: async (id: string) => {
+    await documentApi.resetCover(id)
+    set({
+      documents: get().documents.map((d) => (d.id === id ? { ...d, coverUrl: null } : d))
+    })
   }
 }))

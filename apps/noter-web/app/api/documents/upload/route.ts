@@ -87,7 +87,7 @@ export const POST = handler(async (request: Request) => {
       vector_status: 'pending',
       summary_status: 'pending',
       mindmap_status: 'pending',
-      folder_id: folderId || null,
+      folder_id: folderId || null
     })
     .select()
     .single()
@@ -131,6 +131,7 @@ export const POST = handler(async (request: Request) => {
     isArchived: document.is_archived,
     deleted: document.deleted,
     folderId: document.folder_id ?? null,
+    coverUrl: document.cover_url ?? null,
     tags: [],
     createdAt: document.created_at,
     updatedAt: document.updated_at

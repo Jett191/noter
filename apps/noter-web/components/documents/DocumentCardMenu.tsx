@@ -19,53 +19,64 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@noter/ui/components/alert-dialog'
-import { MoreHorizontal, ImageIcon, Trash2, RotateCcw } from 'lucide-react'
+import { MoreHorizontal, ImageIcon, Trash2, RotateCcw, Loader2 } from 'lucide-react'
 import { useDocumentStore } from '@/stores/document'
-import {
-  compressImageToDataURL,
-  getCustomCover,
-  removeCustomCover,
-  setCustomCover
-} from '@/utils/feature/documents/cover'
+
+const MAX_COVER_SIZE = 5 * 1024 * 1024 // 5MB
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
 interface DocumentCardMenuProps {
   documentId: string
+  hasCustomCover: boolean
 }
 
-export function DocumentCardMenu({ documentId }: DocumentCardMenuProps) {
+export function DocumentCardMenu({ documentId, hasCustomCover }: DocumentCardMenuProps) {
   const deleteDocument = useDocumentStore((s) => s.deleteDocument)
+  const uploadCover = useDocumentStore((s) => s.uploadCover)
+  const resetCover = useDocumentStore((s) => s.resetCover)
+
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handlePickImage = (e: React.MouseEvent) => {
-    e.stopPropagation()
+  const handlePickImage = (e: Event) => {
     e.preventDefault()
     fileInputRef.current?.click()
   }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      alert('请选择图片文件')
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      alert('仅支持 JPG、PNG、WebP、GIF 格式')
       return
     }
+    if (file.size > MAX_COVER_SIZE) {
+      alert('封面文件不能超过 5MB')
+      return
+    }
+
+    setUploading(true)
     try {
-      const dataUrl = await compressImageToDataURL(file)
-      setCustomCover(documentId, dataUrl)
+      await uploadCover(documentId, file)
     } catch (err) {
       console.error(err)
-      alert(err instanceof Error ? err.message : '保存封面失败')
+      alert(err instanceof Error ? err.message : '封面上传失败')
     } finally {
-      e.target.value = ''
+      setUploading(false)
     }
   }
 
-  const handleResetCover = (e: Event) => {
-    e.stopPropagation()
-    if (getCustomCover(documentId)) {
-      removeCustomCover(documentId)
+  const handleResetCover = async (e: Event) => {
+    e.preventDefault()
+    try {
+      await resetCover(documentId)
+    } catch (err) {
+      console.error(err)
+      alert(err instanceof Error ? err.message : '恢复默认封面失败')
     }
   }
 
@@ -82,8 +93,6 @@ export function DocumentCardMenu({ documentId }: DocumentCardMenuProps) {
     }
   }
 
-  const hasCustomCover = typeof window !== 'undefined' && !!getCustomCover(documentId)
-
   return (
     <>
       <DropdownMenu>
@@ -95,7 +104,11 @@ export function DocumentCardMenu({ documentId }: DocumentCardMenuProps) {
           className='flex size-6 items-center justify-center rounded-md text-white/90 transition-all hover:bg-white/20 hover:text-white focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:outline-none'
           style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.4))' }}
           aria-label='文档操作'>
-          <MoreHorizontal className='size-4' />
+          {uploading ? (
+            <Loader2 className='size-4 animate-spin' />
+          ) : (
+            <MoreHorizontal className='size-4' />
+          )}
         </DropdownMenuTrigger>
         <DropdownMenuContent align='start' className='w-44' onClick={(e) => e.stopPropagation()}>
           <DropdownMenuGroup>
@@ -126,7 +139,7 @@ export function DocumentCardMenu({ documentId }: DocumentCardMenuProps) {
       <input
         ref={fileInputRef}
         type='file'
-        accept='image/*'
+        accept='image/jpeg,image/png,image/webp,image/gif'
         className='hidden'
         onChange={handleFileChange}
         onClick={(e) => e.stopPropagation()}

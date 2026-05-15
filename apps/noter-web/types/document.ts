@@ -38,6 +38,7 @@ export interface Document {
   isArchived: number
   deleted: number
   folderId: string | null
+  coverUrl: string | null
   tags: Tag[]
   createdAt: string
   updatedAt: string
