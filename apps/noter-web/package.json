@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@noter/agent-runtime": "workspace:*",
     "@noter/api": "workspace:*",
     "@noter/ui": "workspace:*",
     "@react-pdf/renderer": "^4.5.1",

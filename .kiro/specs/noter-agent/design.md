@@ -21,7 +21,7 @@ Noter Agent 是 Noter 文档智能阅读系统中的 AI 交互层，基于 **Ski
 - ❌ **`/explain` 反问态入库（`pending_skill` 字段）**：本期不再创建 session、不写 `agent_skill_sessions.pending_skill`。`/explain` 触发时若无 concept 参数，直接通过 SSE `content` 文本回复「想了解哪个概念？请直接输入想了解的概念」，前端可以在输入框 placeholder 上做提示；用户下次发送的消息走正常路径，由意图分类匹配到 `/explain` 并把消息内容当作 concept。
 - ❌ **复杂 SkillSwitch 原子事务**：本期简化为顺序操作——先 `UPDATE agent_skill_sessions SET state.status = 'interrupted'`，再启动新 Skill。不引入数据库事务、不强制原子性。
 - ❌ **`clarification` 事件**：从 SSE 协议事件清单中删除，不再保留协议位。
-- ❌ **SkillRouter 三级优先级中"OnTopic 判定"那一级**：删除。本期 Router 简化为两级：(1) 显式 command 直达；(2) 自然语言 → 关键词 + LLM 兜底意图分类。
+- ❌ **SkillRouter 第二级中的 OnTopic 判定**：删除。本期 Router 仍保持**三级优先级**——(1) 显式 command 直达；(2) 多轮 session 续签（直接 `mode='resume'` 把消息整体作为 params，**不调用 OnTopic_Classifier**）；(3) 自然语言意图分类（关键词 + LLM 兜底）。第二级仅去掉 OnTopic 判定，并未把它和第三级合并。
 
 ### 设计原则
 
@@ -148,55 +148,63 @@ sequenceDiagram
 
 Skill Router 是 `packages/agent-runtime` 的入口，负责把"用户输入"映射到"具体 Skill + 参数"。
 
-### 路由优先级（本期简化为两级）
+### 路由优先级（三级，本期第二级不做 OnTopic 判定）
 
 ```pascal
 PROCEDURE route(input)
   INPUT: input = { command?: string, params?: object, message: string,
                    activeSession?: SkillSession }
-  OUTPUT: { skill: SkillName, params: object, mode: 'fresh' | 'resume' }
+  OUTPUT: { skill: SkillName, params: object, mode: 'fresh' | 'resume',
+            switchFromSession?: SkillSession }
 
   SEQUENCE
-    // 1. 显式 command 最高优先级（来自 SkillLaunchpad / SlashCommandMenu）
+    // 第一级：显式 command 最高优先级（来自 SkillLaunchpad / SlashCommandMenu）
     IF input.command IS NOT NULL THEN
+      switchFrom ← NULL
       IF input.activeSession IS NOT NULL AND
          input.activeSession.skill ≠ input.command THEN
-        // Skill 切换：直接打断旧 session（顺序约束，非事务原子）
-        interruptSession(input.activeSession)
+        // Skill 切换：在 RouteDecision 中标记需要打断的旧 session
+        // **不**在此处调用 SessionTool.interrupt、不发 SSE、不注入系统提示
+        // 这些副作用全部由 orchestrator 顺序编排
+        switchFrom ← input.activeSession
       END IF
-      RETURN { skill: input.command, params: input.params, mode: 'fresh' }
+      RETURN { skill: input.command, params: input.params, mode: 'fresh',
+               switchFromSession: switchFrom }
     END IF
 
-    // 2. 多轮 session 进行中：直接续签，不做 OnTopic 判定
-    //    任何用户消息都被当作对当前 session 的回应交给 Skill Handler
-    //    （Skill 内部如需引导回主题，由 prompt 自行处理）
+    // 第二级：多轮 session 进行中：直接续签（mode='resume'），不调用 OnTopic_Classifier
+    //    任何用户消息（含 /quiz answering / graded 阶段提交的 params）都被当作对当前
+    //    session 的回应交给 Skill Handler；Skill 内部根据 state.status 推进状态机
     IF input.activeSession IS NOT NULL AND
        input.activeSession.skill IN ['/tutor', '/quiz'] THEN
-      RETURN { skill: input.activeSession.skill, params: input.message,
+      RETURN { skill: input.activeSession.skill,
+               params: input.params OR input.message,
                mode: 'resume' }
     END IF
 
-    // 3. 慢路径：自然语言意图分类（关键词 + LLM 兜底）
+    // 第三级：慢路径——自然语言意图分类（关键词 + LLM 兜底）
     intent ← classifyIntent(input.message)
     RETURN { skill: intent.skill, params: intent.params, mode: 'fresh' }
   END SEQUENCE
 END PROCEDURE
 ```
 
-> 本期 **不实现 OnTopic_Classifier**，也不发送 `off_topic_notice` / `clarification` 事件。所有偏题判定由 Skill Handler 自身在 prompt 层面处理。
+> **Router 是纯函数**：仅输入 → 输出 `RouteDecision`，无副作用（不写 DB、不发 SSE、不注入消息）。`switchFromSession` 字段告诉 orchestrator"需要先打断旧 session 才能启动新 Skill"，由 orchestrator 顺序执行：(1) `SessionTool.interrupt(switchFromSession.id)`；(2) SSE `session_banner` 推送 `{ skill: oldSkill, status: 'interrupted' }`；(3) 注入系统提示「已退出 X，开始新的 Y...」；(4) 启动新 Skill。中途任一步失败则不启动新 Skill 并发 SSE error。详见 Frontend Interaction Design 中 `orchestrate(routeDecision)` 段落。
+
+> 本期 Router 仍是**三级优先级**结构，只是第二级去除 OnTopic 判定：不实现 OnTopic_Classifier、不发送 `off_topic_notice` / `clarification` 事件。所有偏题判定由 Skill Handler 自身在 prompt 层面处理。
 
 ### 意图分类规则（关键词 + LLM 兜底）
 
 | 关键词 / 短语 | 命中 Skill |
 |---------------|-----------|
-| "速览"、"快速了解"、"这是什么"、"先看看" | `/brief` |
-| "教我"、"私教"、"带我读"、"逐章讲" | `/tutor` |
-| "什么是 X"、"X 是什么意思"、"解释一下 X" | `/explain` (X 作为参数) |
-| "我读完了"、"接下来做什么"、"行动项"、"todo" | `/actions` |
-| "考考我"、"测试"、"出题"、"quiz" | `/quiz` |
-| 其他（关键词与 LLM 均未给出明确分类） | `/explain` 兜底 |
+| 速览 / 快速了解 / 这是什么 / 先看看 / 简介 / brief | `/brief` |
+| 教我 / 私教 / 带我读 / 逐章讲 / 给我讲讲 / 学一遍 / tutor | `/tutor` |
+| 什么是 X / X 是什么意思 / 解释一下 X / 啥是 X / 解释 / explain | `/explain`（X 作为参数） |
+| 我读完了 / 接下来做什么 / 行动项 / 待办 / 下一步 / todo / actions | `/actions` |
+| 考考我 / 测试 / 出题 / 测一下 / 来道题 / 考试 / quiz | `/quiz` |
+| 其他（关键词与 LLM 均未给出明确分类） | **回落策略：未来回落到 `general_qa`（文档 RAG QA），本期 `general_qa` 未实现，回落到 `/brief`** |
 
-> 本期不使用 confidence 阈值，也不发送 `clarification` 事件。低置信场景统一走 `/explain` 兜底，由用户在结果中决定下一步。
+> `general_qa` 为 P1 后续 Skill：基于全文 chunks 的传统 RAG 问答，与 5 个目标驱动 Skill 互补；本期暂未实现，自然语言未识别时回落到 `/brief`。本期不使用 confidence 阈值，也不发送 `clarification` 事件。
 
 ---
 
@@ -220,13 +228,13 @@ END PROCEDURE
 - **输出**：`structured_message` `BriefCard` payload，五字段 JSON
 - **交互**：单轮即终；末尾追加 `FollowUpChips`（变更 2.9）
 - **状态**：不写 `agent_skill_sessions`
-- **降级**：`document_summaries` 缺失 → 直接读 `document_contents.markdown_content` 前 3000 字 + outline，让 LLM 现场提取
+- **降级**：`document_summaries` 缺失 → 调用 `OutlineTool.getMarkdownPrefix(documentId, 3000)` 读 `document_contents.markdown_content` 前 3000 字 + `getOutline()` 让 LLM 现场提取
 
 ### `/tutor` — 章节私教
 
 - **触发**：启动卡片 / `/tutor` / "教我这篇"
 - **流程**：基于 `outline` 切章节 → 每章一轮 → "讲核心要点 → 引导提问 → 评估回答 → 进入下一章"
-- **检索**：每轮按当前章节 `heading_path` 过滤 `document_chunks`，取章节内全部分片（不超过 8000 token）
+- **检索**：按当前章节 `heading_path` 过滤 `document_chunks`；若拼接后 token ≤ 8000 直接全量；超长则**代表性采样**（章首段 + 章末段各 1500 token + 中间部分按 chunk_index 等距抽样 ≤ 5000 token），仍超长则调用 LLMTool 对中间部分做章节级摘要压缩，确保最终 prompt ≤ 8000 token
 - **Prompt**：
   ```
   [角色] 你是私教
@@ -262,7 +270,7 @@ END PROCEDURE
 ### `/actions` — 行动项提取
 
 - **触发**：`/actions` / 启动卡 / "我读完了应该做什么"
-- **检索**：直读 `document_summaries.todos` + `document_summaries.key_points` + `outline` 各章首段（章首段从 `document_chunks` 按 `chunk_index = 0 of each heading_path` 取）
+- **检索**：直读 `document_summaries`（summary / key_points / keywords / suitable_scenarios / todos）+ `document_contents.outline` + 各章首段（按 `chunk_index = 0 of each heading_path` 取自 `document_chunks`）；**不**对 `summary.todos` 做强依赖——todos 字段缺失或为空时仍走正常路径，从可用结构化字段现场生成 LLM prompt
 - **Prompt**：
   ```
   基于结构化信息，输出三块：
@@ -273,7 +281,7 @@ END PROCEDURE
 - **输出**：`structured_message` `ActionsCard`：`{ todos: string[], conceptsToLearn: string[], readingSuggestions: string[] }`
 - **交互**：单轮，**只读纯展示**（不可勾选、不写回 notes）；末尾 `FollowUpChips`
 - **状态**：不写 session
-- **降级**：summary 缺失 → 读 outline + 各章首段 + 关键词，让 LLM 现场提取（结果数量受 Property `/actions 数据完整性` 约束）
+- **降级**：`document_summaries` 整条记录缺失时，读取 `getOutline()` + 各章首段（`getChapterChunks` 取每章首个 chunk）让 LLM 现场提取（actions 不需要 markdown_prefix）；本路径与 todos 缺失路径同等对待，且不向前端发送 SSE error
 
 ### `/quiz` — 出题考我
 
@@ -287,30 +295,37 @@ sequenceDiagram
     participant DB as DB
 
     U->>FE: 触发 /quiz
-    FE->>EF: command=/quiz
+    FE->>EF: command=/quiz（无 sessionId）
+    EF->>DB: INSERT session.status=configuring
+    EF-->>FE: session_banner { sessionId, status:'active' }
     EF-->>FE: structured_message: QuizConfigPrompt
-    Note over FE: 展示前端表单（题型/题量/难度）
+    Note over FE: 记录 sessionId 到 chatSession store；展示前端表单
     U->>FE: 提交配置
-    FE->>EF: command=/quiz, params={config}
-    EF->>DB: 写 session.status=answering
-    EF-->>FE: structured_message: QuizGroupCard (一组题)
+    FE->>EF: sessionId, params={config}（不携带 command）
+    Note over EF: SkillRouter 第二级 mode='resume' 续签当前 /quiz session
+    EF->>DB: 写 state.config + 生成 questions（含 correctAnswer）
+    EF->>DB: 更新 status=answering
+    EF-->>FE: structured_message: QuizGroupCard（脱敏：questions 不含 correctAnswer）
     U->>FE: 全部作答 → 提交
-    FE->>EF: command=/quiz, params={answers}
-    EF->>DB: 写 gradingResult
+    FE->>EF: sessionId, params={answers}（不携带 command）
+    Note over EF: 同样 mode='resume' 续签
+    EF->>DB: 用 DB 完整 state 比对 → 写 gradingResult
+    EF->>DB: 更新 status=graded
     EF-->>FE: structured_message: QuizResultCard
-    EF->>DB: 写 session.status=graded
 ```
 
 #### 配置 → 出题 → 评分
 
-- **第一阶段（配置）**：触发即弹出 `QuizConfigPrompt`（结构化前端表单消息），让用户选：
+- **第一阶段（配置 / configuring）**：触发时若**无 sessionId**：fresh 启动、`INSERT agent_skill_sessions` 记录、`state.status='configuring'`，并通过 SSE `session_banner` 事件向前端投递新建的 sessionId（payload 含 `sessionId` 字段）。前端 chatSession store 在收到第一个 `session_banner` 后必须立即记录 sessionId，用于后续续签。同帧追加 `structured_message: QuizConfigPrompt`，让用户选：
   - 题型多选：`single` / `multi` / `fill` / `short`
   - 题量：1–10
   - 难度：`recall` / `understand` / `apply` / `mixed`（默认 mixed）
-- **第二阶段（出题）**：用户提交配置 → agent **一次性生成一组题**
+- **第二阶段（出题 / answering）**：**前端提交配置时必须携带 sessionId、不携带 command**；SkillRouter 第二级 `mode='resume'` 续签当前 `/quiz` session；Handler 根据 `state.status='configuring'` + `params.config` 推进状态机；**进入 answering 前严格校验 `config.count ∈ [1, 10]`**：超出区间直接发 SSE error 拒绝整个请求、不进入 LLM 出题；通过校验后一次性生成全部题目、写回 `state.questions`（含 correctAnswer，仅服务端可见）。
   - 检索：基于 `outline` 取每章关键内容采样 + 必要时章节级向量搜索
   - 难度分配：`recall` 取关键术语 / 定义；`understand` 取概念关系；`apply` 取场景题
-- **第三阶段（评分）**：前端 `QuizGroupCard` 全部作答后一次性提交 → agent 一次性返回所有题评分 + 解析 → `QuizResultCard`
+- **第三阶段（评分 / graded）**：**前端提交答案时必须携带 sessionId、不携带 command**；同样 `mode='resume'` 续签；Handler 根据 `state.status='answering'` + `params.answers` 推进；用 DB 完整 state 比对生成 `results`、写回 `state.gradingResult`，一次性返回 `QuizResultCard`。
+- **答案脱敏（关键安全约束）**：DB 中 `agent_skill_sessions.state.questions[i].correctAnswer` 完整保留，但任何返回前端的 `QuizGroupCard` payload 都必须**剥离 correctAnswer 字段**。session 通过 `sessionId` 恢复时，后端从 DB 读取完整 state、剥离 correctAnswer 后再投递给前端。前端的 `answers` 提交后，后端用 DB 完整 state 比对生成 `QuizResultCard`。即"DB 完整 / 前端脱敏"的双视图。
+- **command='/quiz' 仅用于首次触发**：configuring 阶段后续提交（answering / graded）均**不**带 `command`，用 `sessionId` 续签；后端 SkillRouter 应把"命中活跃 `/quiz` session 的 `command='/quiz'` 重复触发"识别为破坏多轮状态机的 fresh 启动并拒绝（或前端 store 层先行拦截）。
 - **输出契约**：见 Data Models 中的 `QuizQuestion` / `QuizSessionState`
 - **交互**：多轮但轻量（配置 → 出题 → 提交评分），不像 tutor 持续 N 轮
 - **状态**：`agent_skill_sessions` 记录题组、用户答案、评分（详见 Data Models）
@@ -331,6 +346,7 @@ sequenceDiagram
    - `wide`（两栏，隐藏元数据与大纲）：双列 3+2 排布
 3. **呼吸感优先**：normal 尺寸下**不强求 5 个 Skill 全展示**，按 priority 取前 3 张主推卡，其余折叠到"更多 ▾"。
 4. **三入口同源**：点卡片 / 斜杠命令 / 自然语言三种触发方式最终都收敛到同一份 SSE 请求体（`{ documentId, command?, params?, message? }`）。
+5. **UI 范围约束**：所有新增交互 UI（SkillLaunchpad / SlashCommandMenu / SessionBanner / FollowUpChips / 各 Card）**仅限于** `AIChatPanel` 内部渲染；不得在文档详情页其他位置（如左侧大纲、右侧元数据、正文区）新增任何 agent 相关交互入口。所有新组件统一放在 `apps/noter-web/components/document-detail/chat/` 目录下。
 
 ### SkillLaunchpad（启动面板）
 
@@ -416,28 +432,44 @@ sequenceDiagram
 | `/quiz` configuring | `通过上方表单选择题型和题量`（输入框暂时禁用或仅文字补充） |
 | `/quiz` answering | `输入答案 A/B/C/D 或文字...` |
 
-### Skill 切换处理（直接打断）
+### Skill 切换处理（直接打断 / orchestrator 编排）
 
-用户在 `/tutor` 或 `/quiz` 进行中**触发任意新 Skill**（点卡片 / 斜杠命令 / 强意图自然语言）→ **直接打断当前 session**，不弹确认。本期采用**顺序约束**而非数据库事务：
+用户在 `/tutor` 或 `/quiz` 进行中**触发任意新 Skill**（点卡片 / 斜杠命令 / 强意图自然语言）→ **直接打断当前 session**，不弹确认。本期采用**顺序约束**而非数据库事务；副作用由 **orchestrator** 顺序编排（**Router 不直接执行 interrupt、不发 SSE、不注入系统提示**）：
 
 ```pascal
-PROCEDURE handleSkillSwitch(currentSession, newSkill)
+PROCEDURE orchestrate(routeDecision)
+  INPUT: routeDecision = { skill, params, mode, switchFromSession? }
+  // 这是 orchestrator 而非 Router 的逻辑：Router 仅返回 RouteDecision，
+  // 副作用（DB 写、SSE 推送、系统提示注入、Skill 启动顺序）由 orchestrator 编排
+
   SEQUENCE
-    // 1. 先标记旧 session 已中断（顺序先于新 Skill 启动）
-    currentSession.state.status ← 'interrupted'
-    currentSession.expires_at ← now()
-    persistSession(currentSession)        // ← 必须在新 skill 启动前完成
+    IF routeDecision.switchFromSession IS NOT NULL THEN
+      // 1. 先标记旧 session 已中断（顺序先于新 Skill 启动）
+      affectedRows ← SessionTool.interrupt(routeDecision.switchFromSession.id)
+      IF affectedRows < 1 THEN
+        // 中途失败：不启动新 Skill，发 SSE error
+        emitSSE('error', { error: 'failed to interrupt previous session' })
+        RETURN
+      END IF
 
-    // 2. 在消息流追加系统提示
-    appendSystemNotice("已退出私教，开始新的 " + skillLabel(newSkill) + "...")
+      // 2. 通过 SSE session_banner 推送旧 session 的 interrupted 状态
+      emitSSE('session_banner', {
+        skill: routeDecision.switchFromSession.skill,
+        status: 'interrupted'
+      })
 
-    // 3. 启动新 skill（fresh）
-    startSkill(newSkill, mode: 'fresh')
+      // 3. 在消息流追加系统提示
+      emitSystemNotice("已退出 " + skillLabel(routeDecision.switchFromSession.skill)
+                       + "，开始新的 " + skillLabel(routeDecision.skill) + "...")
+    END IF
+
+    // 4. 启动新 Skill（fresh）
+    startSkill(routeDecision.skill, routeDecision.params, routeDecision.mode)
   END SEQUENCE
 END PROCEDURE
 ```
 
-> **顺序约束**由 `Property: Skill 切换顺序约束` 保证（详见 Correctness Properties）。本期不要求事务原子性。
+> **顺序约束**由 `Property: Skill 切换顺序约束` 保证（详见 Correctness Properties）。本期不要求事务原子性。Router 在 Property 测试中保持纯函数语义（无任何 mock 副作用断言）。
 
 ### 需要参数的 Skill 反问
 
@@ -445,7 +477,7 @@ END PROCEDURE
 
 | Skill | 反问行为 |
 |-------|----------|
-| `/explain` | 通过 SSE `content` 直接回复一条文本「想了解哪个概念？请直接输入想了解的概念」；输入框 placeholder 可变为 `输入想了解的概念...`；**不**写 `agent_skill_sessions.pending_skill`、**不**创建 session；用户下一条消息走正常路径，由意图分类匹配到 `/explain` 并把消息内容当作 concept |
+| `/explain` | 通过 SSE `content` 直接回复一条文本「想了解哪个概念？请直接输入想了解的概念」；输入框 placeholder 可变为 `输入想了解的概念...`；**不**写 `agent_skill_sessions.pending_skill`、**不**创建 session；**前端不维护 pending state**——下次用户消息走正常意图分类，由分类器匹配到 `/explain` 并把消息内容当作 concept |
 | `/quiz` | 不走文本反问，直接发 `structured_message: QuizConfigPrompt`，由前端展示结构化表单 |
 
 ### 结构化卡片消息
@@ -503,9 +535,8 @@ interface ChatStreamRequest {
 | `content` | 文本流式片段（用于 markdown 流式渲染） | `{ content: string }` |
 | `structured_message` | 输出结构化卡片 | `{ messageType: string, payload: object }` |
 | `follow_ups` | 单轮 Skill 结束 | `{ chips: { label: string, command: SkillName, params?: object }[] }` |
-| `session_banner` | 多轮 session 状态变化 | `{ skill: SkillName, status: 'active' \| 'ended' \| 'interrupted', progress?: { current: number; total: number } }` |
+| `session_banner` | 多轮 session 状态变化 | `{ skill: SkillName, status: 'active' \| 'ended' \| 'interrupted', progress?: { current: number; total: number }, sessionId?: string }`<br/>`sessionId` 仅在 configuring 阶段首次推送时存在，前端据此记录 sessionId 用于后续续签 |
 | `error` | 任意阶段失败 | `{ error: string, code?: number }` |
-| `done` | 流式响应正常结束 | 等价于终止帧 `data: [DONE]\n\n`（无独立 JSON payload） |
 
 ### structured_message.messageType 取值集合
 
@@ -523,7 +554,7 @@ interface ChatStreamRequest {
 
 ### 终止帧
 
-每次完整响应结束输出 `data: [DONE]\n\n` 作为终止标记。事件清单中的 `done` 仅作为协议层语义名称，不对应独立的 JSON 事件。
+每次完整响应结束输出 `data: [DONE]\n\n` 作为终止标记。此终止帧**不是 SSE event**，而是流式协议的结束信号；事件清单中**不再列出** `done` 事件，SSE 事件 `event` 字段取值集合收紧为 `{content, structured_message, follow_ups, session_banner, error}`。
 
 ### 事件交互示例（/tutor 第三章）
 
@@ -548,7 +579,7 @@ Tool Layer 是 Skill Handler 与外部能力之间的薄封装，每个 Tool 单
 | Tool | 职责 | 关键方法 |
 |------|------|----------|
 | `SummaryTool` | 读 `document_summaries` 结构化字段 | `getSummary(documentId)` |
-| `OutlineTool` | 读 `document_contents.outline`、按 heading 取章节范围 | `getOutline()` / `getChapterChunks(headingPath)` |
+| `OutlineTool` | 读 `document_contents.outline`、按 heading 取章节范围、读 markdown 前缀（用于 /brief 降级） | `getOutline()` / `getChapterChunks(headingPath)` / `getMarkdownPrefix(documentId, charLimit)` |
 | `ChunkSearchTool` | 在当前 documentId 内做向量 / 关键词 / 混合搜索 | `vectorSearch(query, k)` / `keywordSearch(query, k)` / `hybridSearch(query, k)` |
 | `SessionTool` | CRUD `agent_skill_sessions`，含 interrupt 原子操作 | `load(sessionId)` / `upsert(session)` / `interrupt(sessionId)` |
 | `LLMTool` | MiMo LLM 调用（流式 / 非流式 / JSON 模式） | `stream(prompt)` / `complete(prompt)` / `completeJson(prompt, schema)` |
@@ -570,7 +601,9 @@ interface ChunkHit {
 }
 ```
 
-> **作用域约束**：所有 `ChunkSearchTool` 方法都在 SQL WHERE 中强制 `document_id = :currentDocumentId`，确保 Skill 只能检索当前文档。
+> **作用域约束**：所有 `ChunkSearchTool` 方法都在 SQL WHERE 中强制 `document_id = :currentDocumentId AND user_id = :userId`，确保 Skill 只能检索当前文档。其中 `hybridSearch` 通过 `hybrid_search_scoped(p_query_text, p_query_embedding, p_match_count, p_user_id, p_document_id)` RPC 调用，user_id / document_id 在 **RPC 函数内部 WHERE** 强制过滤，不依赖调用方包外层子查询；`vectorSearch` / `keywordSearch` 不走 RPC，仍由 Tool 自身在 SQL 中强制 `document_id` + `user_id` 谓词。
+>
+> 本期**新增** `hybrid_search_scoped` 函数（强制 `user_id` + `document_id` 过滤），不改动旧 `hybrid_search` 函数（继续服务 noter-document-management 的全库搜索 Route Handler）；agent-runtime 的 ChunkSearchTool **仅调用** `hybrid_search_scoped`，避免影响已有调用方。
 
 ---
 
@@ -589,7 +622,7 @@ interface ChunkHit {
 | deleted | int (0/1) | 软删除 |
 | created_at / updated_at | timestamptz | 时间戳 |
 
-> RLS：`auth.uid() = user_id`，与 documents 表保持一致。
+> RLS：表上**已启用 RLS**（`ALTER TABLE ... ENABLE ROW LEVEL SECURITY`），**仅允许 service_role**（authenticated / anon 角色无任何 policy，且通过 `REVOKE ALL` 显式撤销表级权限）；前端访问 session 数据**必须**经 `/api/ai/sessions` Route Handler，后端用 service_role 读取后强制脱敏（剔除 `state.questions[i].correctAnswer`）再投递。任何 supabase-js 客户端直查 `agent_skill_sessions.*` 应返回 `permission denied`。这是 Quiz `correctAnswer` 防泄露的第二道防线。
 >
 > **本期简化**：表只服务于 `/tutor` 和 `/quiz`，不服务于 `/explain` 反问态；**已删除 `pending_skill` 字段**（如果未来要做反问态可重新加）。
 
@@ -634,6 +667,9 @@ interface QuizQuestion {
   question: string
   options?: string[]             // 仅 single / multi
   correctAnswer: unknown         // single: string; multi: string[]; fill/short: string
+                                 // 仅在 DB 与服务端运行时存在；任何 SSE
+                                 // structured_message: QuizGroupCard 投递前
+                                 // 必须经 stripCorrectAnswers(questions) 脱敏
 }
 ```
 
@@ -650,7 +686,9 @@ interface QuizQuestion {
 
 ### 混合搜索复用
 
-`/explain` 的混合搜索复用文档管理模块已有的 `hybrid_search(query_text, query_embedding, match_count)` RPC，但在 agent-runtime 的 ChunkSearchTool 中**追加 documentId 过滤**：在 RPC 之上包一层 `document_chunks` 子查询，确保检索范围限定在当前文档。
+`/explain` 的混合搜索调用**新增的** `hybrid_search_scoped(p_query_text, p_query_embedding, p_match_count, p_user_id, p_document_id)` RPC；`user_id` / `document_id` 过滤在 **RPC 函数内部** 强制执行（WHERE `user_id = p_user_id AND document_id = p_document_id AND deleted = 0`），不依赖调用方添加外层子查询。
+
+> 本 spec **新增** `hybrid_search_scoped` 函数（基于 noter-document-management 已有的 `hybrid_search` 算法、追加 `user_id` + `document_id` 强制过滤），**不改动**旧 `hybrid_search` 函数（旧函数继续服务于 noter-document-management 模块的全库搜索 Route Handler 等已有调用方）。详见 tasks.md Task 1.4。
 
 ---
 
@@ -672,6 +710,12 @@ interface QuizQuestion {
 4. 若 `sessionId` 存在，校验 `agent_skill_sessions.user_id = :userId AND document_id = :documentId`
 5. 通过后调用 `runAgent({ userId, documentId, ... })`，由 `packages/agent-runtime` 接管 SSE 流生成
 
+`/api/ai/sessions` 端点同样执行两步校验：
+
+- **GET `/api/ai/sessions`**：必须接收 `documentId` 查询参数（必填，缺失返回 400）；先做归属校验（403）再做状态校验（422）；通过后查询当前文档的活跃 session
+- **PATCH / DELETE `/api/ai/sessions/[id]`**：通过 sessionId 反查 session 拿到 `document_id`，再对该 document_id 执行两步校验
+- 三个端点与 `/api/ai/chat/stream` **共享同一份两步校验逻辑**，不得绕过
+
 ### 关键约定
 
 - **404 等同于 403** —— 不存在与无权限对外不可区分
@@ -685,7 +729,11 @@ interface QuizQuestion {
 
 ### 数据库层
 
-- `agent_skill_sessions` 启用 RLS：`auth.uid() = user_id`
+- `agent_skill_sessions` 表四步隔离：
+  1. **启用 RLS**：`ALTER TABLE agent_skill_sessions ENABLE ROW LEVEL SECURITY;`
+  2. **仅 service_role 策略**：不为 `authenticated` / `anon` 创建任何 policy（RLS 默认拒绝）
+  3. **REVOKE 双保险**：`REVOKE ALL ON TABLE agent_skill_sessions FROM authenticated, anon;`
+  4. **访问路径约束**：前端必须经 `/api/ai/sessions` Route Handler 间接访问；后端用 service_role 读取后强制脱敏 `state.questions[i].correctAnswer` 再投递。任何 supabase-js 直查 `agent_skill_sessions.*` 应返回 `permission denied`
 - 复用文档管理模块的所有 RLS 策略（documents / document_contents / document_chunks / document_summaries）
 
 ---
@@ -747,9 +795,10 @@ packages/agent-runtime/
 ├── tsconfig.json
 ├── src/
 │   ├── index.ts                # 唯一对外入口：runAgent({...}) 返回 SSE 流
-│   ├── orchestrator.ts         # 协调 Router → Skill → SSE
+│   ├── orchestrator.ts         # 协调 Router → Skill → SSE；负责 Skill_Switch 的副作用
+│   │                            # 顺序（interrupt → SSE banner → 系统提示 → 启动新 Skill）
 │   ├── router/
-│   │   ├── skill-router.ts     # 简化版两级路由
+│   │   ├── skill-router.ts     # 三级优先级路由（本期第二级不做 OnTopic 判定）
 │   │   └── intent.ts           # 关键词 + LLM 兜底意图分类
 │   ├── skills/
 │   │   ├── registry.ts         # 显式注册 5 个 Skill
@@ -800,7 +849,9 @@ apps/noter-web/
 │   └── document-detail/
 │       ├── AIChatPanel.tsx                 # 容器（已有，扩展）
 │       ├── ChatMessage.tsx                 # 已有，扩展支持 messageType
-│       ├── chat/
+│       ├── chat/                           # **约束**：所有 chat 相关 UI 都通过 AIChatPanel
+│       │   │                                #          容器组合渲染，不在文档详情页其他位置
+│       │   │                                #          出现 agent 入口
 │       │   ├── SkillLaunchpad.tsx          # 启动面板
 │       │   ├── SlashCommandMenu.tsx        # 斜杠命令浮层
 │       │   ├── SessionBanner.tsx           # 多轮 session 状态栏
@@ -879,6 +930,8 @@ export async function POST(req: NextRequest) {
 - **`SessionBanner`**：从 `useChatSessionStore` 订阅活跃 session
 - **`useChatStream`**：封装 SSE 解析（`content` / `structured_message` / `follow_ups` / `session_banner` / `error`）
 - **`packages/agent-runtime/src/skills/registry.ts`**：**显式注册**所有 Skill（不动态扫描），保证可静态分析
+- **Router 是纯函数**：仅输入 → 输出 RouteDecision，无副作用（不写 DB、不发 SSE、不注入消息）；便于属性测试
+- **orchestrator 负责副作用**：包括 `SessionTool.interrupt`、SSE `session_banner` 推送、系统提示注入、Skill 启动顺序——本期 Skill_Switch 的所有副作用都收敛到 orchestrator 顺序编排
 
 ### TypeScript 接口
 
@@ -943,7 +996,9 @@ export interface QuizConfigPayload {
 }
 
 export interface QuizGroupPayload {
-  questions: QuizQuestion[]      // correctAnswer 在出题阶段不返回前端
+  questions: QuizQuestion[]      // questions 中**不含** correctAnswer：服务端在投递
+                                 // 任何 QuizGroupCard payload（含 sessionId 恢复路径）
+                                 // 前必须经 stripCorrectAnswers(questions) 脱敏
 }
 
 export interface QuizResultPayload {
@@ -957,6 +1012,16 @@ export interface SSEEvent {
        | 'session_banner' | 'error'
   [key: string]: unknown
 }
+
+// session_banner data 形态（在 SSE 数据中扁平展开）：
+//   {
+//     event: 'session_banner',
+//     skill: SkillName,
+//     status: 'active' | 'ended' | 'interrupted',
+//     progress?: { current: number; total: number },
+//     sessionId?: string  // 仅 /quiz configuring 阶段首次推送时存在；
+//                         // 前端 chatSession store 据此记录 sessionId 用于后续续签
+//   }
 ```
 
 ### 5 个 Skill 优先级建议
@@ -976,7 +1041,7 @@ export interface SSEEvent {
 ## Performance Considerations
 
 - **检索最小化**：`/brief`、`/actions` **不触发向量搜索**，直读结构化字段，token 与时延都接近 LLM-only baseline
-- **分片召回上限**：`/tutor` 每章 chunks 拼接不超过 8000 token；超长章节按 `chunk_index` 顺序截断
+- **分片召回上限**：`/tutor` 每章 chunks 拼接不超过 8000 token；超长章节采用代表性采样（章首段 + 章末段 + 中间等距抽样）+ 必要时章节级摘要压缩，**不**按 `chunk_index` 顺序截断
 - **流式输出**：所有 Skill 的文本主体都走 SSE `content` 流，结构化卡片在文本流结束后追加（避免阻塞首屏）
 - **session 过期清理**：`expires_at < now() AND deleted = 0` 走定时任务软删（每日一次）
 - **/quiz 题量上限**：硬限制 `count ≤ 10`，避免一次性 LLM 调用过长
@@ -988,6 +1053,8 @@ export interface SSEEvent {
 - **作用域强制**：所有 Tool 在 SQL 层强制 `document_id = :currentDocumentId`，前端无法通过参数注入跨文档检索
 - **Prompt 注入防御**：用户消息在 prompt 中以 `[USER_MESSAGE]` 包裹，明确告诉 LLM 这是**输入数据**而非指令；系统指令置于 system role
 - **结构化输出校验**：`/quiz` 的 LLM 输出严格 JSON Schema 校验（type ∈ {single,multi,fill,short}、options 仅在 single/multi 出现），不合法直接拒绝
+- **`/quiz` correctAnswer 仅服务端可见**：DB `agent_skill_sessions.state.questions[i].correctAnswer` 完整保留，但任何 `QuizGroupCard` payload 投递前强制经 `stripCorrectAnswers(questions)` 脱敏；session 通过 `sessionId` 恢复路径同样脱敏；评分阶段后端用 DB 完整 state 比对，前端只发 answers
+- **agent_skill_sessions 前端禁直读**：表 RLS **仅允许 service_role**；`authenticated` / `anon` 角色被显式 `REVOKE ALL`、无任何权限。前端通过 `/api/ai/sessions` 间接访问，后端用 service_role 读取后强制脱敏 `state.questions[i].correctAnswer` 再投递。这是 Quiz `correctAnswer` 防泄露的第二道防线（与脱敏函数互为冗余）
 - **Session 不可跨用户读取**：RLS + agent-runtime 二次校验
 - **错误信息脱敏**：500 错误对外返回 `internal error`，详细堆栈仅写日志
 
@@ -1004,7 +1071,7 @@ export interface SSEEvent {
 | Gemini Embedding (`gemini-embedding-2`, 768 维) | `/explain` 概念向量化 |
 | MiMo LLM (`mimo-v2.5-pro`) | 所有 Skill 的语言生成；`/quiz` 用 JSON 模式 |
 | `react-markdown` + `remark-gfm` | 前端 Markdown 渲染（已有） |
-| 复用 `noter-document-management` 提供的 `hybrid_search` RPC | `/explain` 检索 |
+| 新增 `hybrid_search_scoped` RPC（基于 noter-document-management 已有的 hybrid_search 算法、追加 user_id + document_id 强制过滤） | `/explain` 检索 |
 
 > 不再依赖 Supabase Edge Function (Deno) 运行时；不再需要 Deno import map / std 库。agent-runtime 整体运行在 Next.js Route Handler 的 Node.js 进程内。
 
@@ -1028,7 +1095,7 @@ export interface SSEEvent {
 
 ### Property 3: 同文档作用域强制
 
-*For any* `ChunkSearchTool` / `OutlineTool` / `SummaryTool` 的查询，生成的 SQL 必须包含 `document_id = :currentDocumentId AND user_id = :userId` 谓词。
+*For any* `ChunkSearchTool` / `OutlineTool` / `SummaryTool` 的查询，生成的 SQL 必须包含 `document_id = :currentDocumentId AND user_id = :userId` 谓词。其中 `hybrid_search_scoped` RPC 必须在函数体内部 WHERE 中强制 `user_id = p_user_id AND document_id = p_document_id` 过滤，不依赖调用方添加外层子查询。
 
 **Validates: Requirements 13.5**
 
@@ -1052,7 +1119,7 @@ export interface SSEEvent {
 
 ### Property 7: `/actions` 数据完整性
 
-*For any* `/actions` 输出，`todos.length ≤ document_summaries.todos.length + 20`（即：直读条目 + LLM 补全条目，补全部分硬上限 20）。
+*For any* `/actions` 输出，`todos.length ≤ 20`、`conceptsToLearn.length ≤ 8`、`readingSuggestions.length ≤ 5`（数量上限不依赖 `document_summaries.todos.length`）。
 
 **Validates: Requirements 6.4**
 
@@ -1063,13 +1130,13 @@ export interface SSEEvent {
 - `options` 字段当且仅当 `type ∈ {single, multi}` 时存在
 - `correctAnswer` 类型与 `type` 匹配（single → string；multi → string[]；fill / short → string）
 
-**Validates: Requirements 7.5**
+**Validates: Requirements 7.6**
 
 ### Property 9: `/quiz` 题量上限
 
-*For any* `/quiz` 配置阶段的 `config.count`，最终生成的 `questions.length` 应等于 `config.count` 且 `≤ 10`。
+*For any* `/quiz` 配置阶段的 `config.count`：若超出 [1, 10] 闭区间，agent 必须立即返回 SSE error 并结束流（不进入 LLM 出题，不创建任何题目）；若 `config.count ∈ [1, 10]`，最终生成的 `questions.length` 必须等于 `config.count`，**不允许隐式截断或补全**。
 
-**Validates: Requirements 7.4, 16.3**
+**Validates: Requirements 7.5, 15.3**
 
 ### Property 10: Skill 切换顺序约束
 
@@ -1089,11 +1156,11 @@ export interface SSEEvent {
 
 *For any* 时刻 `t`，`SessionBanner` 显示状态应与最近一次 SSE `session_banner` 事件的 payload 一致；session 不存在或 `status = 'ended' | 'interrupted'` 时 banner 必须不可见。
 
-**Validates: Requirements 4.5, 7.7, 8.5, 14.5**
+**Validates: Requirements 4.5, 7.9, 8.5, 14.5**
 
 ### Property 13: SSE 事件包络
 
-*For any* SSE 事件 `e`，其 JSON 必须包含 `event` 字段且取值在 `{content, structured_message, follow_ups, session_banner, error, done}` 集合内（`done` 等价于终止帧 `data: [DONE]\n\n`）。
+*For any* SSE 事件 `e`，其 JSON 必须包含 `event` 字段且取值在 `{content, structured_message, follow_ups, session_banner, error}` 集合内。终止帧 `data: [DONE]\n\n` 不是 SSE event，不计入此集合。
 
 **Validates: Requirements 11.2**
 
@@ -1143,7 +1210,7 @@ export interface SSEEvent {
 
 ### 集成测试重点覆盖
 
-1. **RLS**：跨用户访问 `agent_skill_sessions` 应返回空
+1. **RLS**：跨用户访问 `agent_skill_sessions` 应返回 RLS 拒绝（authenticated / anon 角色被 REVOKE ALL，仅 service_role 可读写；service_role 下的跨用户隔离由应用层 `user_id = :userId` 谓词保证）
 2. **Session 过期**：`expires_at < now()` 时 router 静默重置为 fresh
 3. **完整链路**：`/tutor` 多轮续签 + 中途打断 + 重启 fresh
 4. **`/quiz` 三阶段**：configuring → answering → graded，DB 状态机正确推进
