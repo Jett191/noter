@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { handler } from '@/utils/http/handler'
 import { success, error } from '@/utils/http/response'
 import { documentIdSchema } from '@/utils/feature/documents/schemas'
+import { readSetting } from '@/lib/settings/readSetting'
 import type { Tag, DocumentContent, DocumentSummary, DocumentMindmap } from '@/types/document'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -9,6 +10,11 @@ type RouteContext = { params: Promise<{ id: string }> }
 /**
  * GET /api/documents/[id]
  * 查询文档详情 + 关联 document_contents + 标签 + document_summaries + document_mindmaps
+ *
+ * 查询范围 (admin-platform task 17.4 / Requirements 12):
+ *   - 私有文档: user_id=auth.uid()
+ *   - 公共文档: document_scope='public' (RLS 已放开 SELECT,普通用户只读可见)
+ *   两类用 OR 条件合并;系统设置 public_documents_visible=false 时仅返回私有文档。
  */
 export const GET = handler(async (_request: Request, { params }: RouteContext) => {
   const { id } = await params
@@ -24,14 +30,18 @@ export const GET = handler(async (_request: Request, { params }: RouteContext) =
     return error('未登录', 401)
   }
 
-  // 查询文档主表
-  const { data: document, error: docError } = await supabase
-    .from('documents')
-    .select('*')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .eq('deleted', 0)
-    .single()
+  const publicVisible = await readSetting('public_documents_visible')
+
+  // 查询文档主表 (私有 ∪ 公共)
+  let docQuery = supabase.from('documents').select('*').eq('id', id).eq('deleted', 0)
+
+  if (publicVisible) {
+    docQuery = docQuery.or(`user_id.eq.${user.id},document_scope.eq.public`)
+  } else {
+    docQuery = docQuery.eq('user_id', user.id)
+  }
+
+  const { data: document, error: docError } = await docQuery.maybeSingle()
 
   if (docError || !document) {
     return error('文档不存在', 404)
@@ -45,9 +55,11 @@ export const GET = handler(async (_request: Request, { params }: RouteContext) =
       .select('id, user_id, document_id, markdown_content, outline, metadata')
       .eq('document_id', id)
       .eq('deleted', 0)
-      .single(),
+      .maybeSingle(),
 
-    // 查询标签（通过 document_tags 关联）
+    // 查询标签 (通过 document_tags 关联)。
+    // 仅查 user_id=auth.uid() 的关联,公共文档的官方标签由 admin 端 endpoint 维护;
+    // 这里若公共文档无该用户的关联记录则返回空,符合 noter-web 端只读语义。
     supabase
       .from('document_tags')
       .select('tag_id, tags(id, name, color, description)')
@@ -63,7 +75,7 @@ export const GET = handler(async (_request: Request, { params }: RouteContext) =
       )
       .eq('document_id', id)
       .eq('deleted', 0)
-      .single(),
+      .maybeSingle(),
 
     // 查询 document_mindmaps
     supabase
@@ -71,7 +83,7 @@ export const GET = handler(async (_request: Request, { params }: RouteContext) =
       .select('id, document_id, mindmap_json, markdown_outline, model_name, generated_at')
       .eq('document_id', id)
       .eq('deleted', 0)
-      .single()
+      .maybeSingle()
   ])
 
   // 组装 document_contents
@@ -143,6 +155,8 @@ export const GET = handler(async (_request: Request, { params }: RouteContext) =
     deleted: document.deleted,
     folderId: document.folder_id,
     coverUrl: document.cover_url ?? null,
+    // 标记文档范围,前端可据此渲染只读公共文档
+    documentScope: (document as { document_scope?: string }).document_scope ?? 'private',
     tags,
     content,
     summary,
@@ -156,7 +170,11 @@ export const GET = handler(async (_request: Request, { params }: RouteContext) =
 
 /**
  * DELETE /api/documents/[id]
- * 软删除文档（设置 deleted=1, deleted_at=now()）
+ * 软删除文档（设置 deleted=1, deleted_at=now()）。
+ *
+ * 访问控制 (admin-platform task 17.5 / Requirements 24):
+ *   - 仅允许删除自己的私有文档 (user_id=auth.uid()),公共文档由 RLS 自然拒绝;
+ *   - system_settings.allow_user_delete_own=false 时拒绝并返回 403。
  */
 export const DELETE = handler(async (_request: Request, { params }: RouteContext) => {
   const { id } = await params
@@ -172,14 +190,20 @@ export const DELETE = handler(async (_request: Request, { params }: RouteContext
     return error('未登录', 401)
   }
 
-  // 先检查文档是否存在
+  // 系统开关:管理员关闭后,普通用户不能删除自己的文档
+  const allowDelete = await readSetting('allow_user_delete_own')
+  if (!allowDelete) {
+    return error('当前不允许删除文档', 403)
+  }
+
+  // 先检查文档是否存在 (仅查询 user_id=auth.uid(),公共文档由系统账号持有,user 删不了)
   const { data: existing, error: findError } = await supabase
     .from('documents')
     .select('id')
     .eq('id', id)
     .eq('user_id', user.id)
     .eq('deleted', 0)
-    .single()
+    .maybeSingle()
 
   if (findError || !existing) {
     return error('文档不存在或已删除', 404)
