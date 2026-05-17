@@ -4,8 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@noter/ui/components/input'
 import { Spinner } from '@noter/ui/components/spinner'
-import { Badge } from '@noter/ui/components/badge'
-import { Search } from 'lucide-react'
+import { Search, Sparkles, Type, Layers, FileText } from 'lucide-react'
 import { searchApi } from '@/lib/axios/search'
 import { buildMatchAnchor } from '@/utils/feature/search/scrollAndHighlight'
 import type { SearchResult } from '@/types/document'
@@ -133,8 +132,9 @@ function HighlightedSnippet({ content, query }: { content: string; query: string
     () => clampSegments(buildSegments(content, query), SNIPPET_MAX_LENGTH),
     [content, query]
   )
+  if (segments.length === 0) return null
   return (
-    <p className='text-muted-foreground mt-1 line-clamp-2 text-xs'>
+    <p className='text-muted-foreground mt-0.5 line-clamp-2 text-xs leading-snug break-words whitespace-normal'>
       {segments.map((seg, i) =>
         seg.highlight ? (
           <mark
@@ -147,6 +147,46 @@ function HighlightedSnippet({ content, query }: { content: string; query: string
         )
       )}
     </p>
+  )
+}
+
+const matchTypeMeta: Record<
+  string,
+  { label: string; icon: React.ComponentType<{ className?: string }>; className: string }
+> = {
+  keyword: {
+    label: '关键词',
+    icon: Type,
+    className: 'bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300'
+  },
+  vector: {
+    label: '语义',
+    icon: Sparkles,
+    className: 'bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300'
+  },
+  hybrid: {
+    label: '混合',
+    icon: Layers,
+    className: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300'
+  }
+}
+
+function MatchTypeChip({ matchType }: { matchType: string }) {
+  const meta = matchTypeMeta[matchType]
+  if (!meta) {
+    return (
+      <span className='text-muted-foreground bg-muted shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium'>
+        {matchType}
+      </span>
+    )
+  }
+  const Icon = meta.icon
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${meta.className}`}>
+      <Icon className='size-3' />
+      {meta.label}
+    </span>
   )
 }
 
@@ -256,12 +296,6 @@ export function SearchBar() {
     }
   }, [])
 
-  const matchTypeLabel: Record<string, string> = {
-    keyword: '关键词',
-    vector: '语义',
-    hybrid: '混合'
-  }
-
   return (
     <div ref={containerRef} className='relative w-full max-w-md' onKeyDown={handleKeyDown}>
       <div className='relative'>
@@ -285,40 +319,48 @@ export function SearchBar() {
       </div>
 
       {showDropdown && (
-        <div className='bg-popover border-border absolute top-full z-50 mt-1 w-full overflow-hidden rounded-md border shadow-md'>
+        <div className='bg-popover border-border absolute top-full left-0 z-50 mt-2 w-full min-w-[20rem] overflow-hidden rounded-xl border shadow-lg'>
           {error ? (
-            <div className='flex flex-col items-center gap-2 p-4 text-center'>
+            <div className='flex flex-col items-center gap-2 px-4 py-6 text-center'>
               <p className='text-destructive text-sm'>{error}</p>
               <button
                 type='button'
                 onClick={handleRetry}
-                className='text-primary hover:text-primary/80 text-sm underline underline-offset-4'>
+                className='text-primary hover:text-primary/80 text-xs underline underline-offset-4'>
                 重试
               </button>
             </div>
           ) : results.length === 0 ? (
-            <div className='text-muted-foreground p-4 text-center text-sm'>未找到相关文档</div>
+            <div className='text-muted-foreground px-4 py-6 text-center text-sm'>
+              未找到相关文档
+            </div>
           ) : (
-            <ul className='max-h-96 overflow-y-auto overscroll-contain'>
-              {results.map((result, index) => (
-                <li key={`${result.documentId}-${index}`}>
-                  <button
-                    type='button'
-                    className='hover:bg-accent w-full cursor-pointer px-4 py-2 text-left transition-colors'
-                    onClick={() => handleResultClick(result)}>
-                    <div className='flex items-center justify-between gap-2'>
-                      <span className='text-foreground truncate text-sm font-medium'>
-                        {result.title}
-                      </span>
-                      <Badge variant='secondary' className='shrink-0'>
-                        {matchTypeLabel[result.matchType] ?? result.matchType}
-                      </Badge>
-                    </div>
-                    <HighlightedSnippet content={result.matchedContent} query={activeQuery} />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <>
+              <div className='text-muted-foreground border-border/60 border-b px-3 py-1.5 text-[11px] font-medium tracking-wide uppercase'>
+                搜索结果 · {results.length}
+              </div>
+              <ul className='max-h-96 overflow-y-auto overscroll-contain py-1'>
+                {results.map((result, index) => (
+                  <li key={`${result.documentId}-${index}`}>
+                    <button
+                      type='button'
+                      className='hover:bg-accent focus-visible:bg-accent flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left transition-colors outline-none'
+                      onClick={() => handleResultClick(result)}>
+                      <FileText className='text-muted-foreground mt-0.5 size-4 shrink-0' />
+                      <div className='min-w-0 flex-1'>
+                        <div className='flex items-center justify-between gap-2'>
+                          <span className='text-foreground truncate text-sm font-medium'>
+                            {result.title}
+                          </span>
+                          <MatchTypeChip matchType={result.matchType} />
+                        </div>
+                        <HighlightedSnippet content={result.matchedContent} query={activeQuery} />
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       )}
