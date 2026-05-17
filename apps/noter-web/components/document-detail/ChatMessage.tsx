@@ -24,8 +24,11 @@
  */
 
 import { cn } from '@noter/ui/lib/utils'
+import { Avatar, AvatarFallback, AvatarImage } from '@noter/ui/components/avatar'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+
+import { useUserStore } from '@/stores/user'
 
 import type {
   ActionsPayload,
@@ -69,16 +72,27 @@ export interface ChatMessageProps {
 }
 
 export function ChatMessage({ message, onSendMessage, submitting }: ChatMessageProps) {
-  const { role, messageType, payload, content, followUps } = message
+  const { role, messageType, payload, content, followUps, isLoading } = message
   const isUser = role === 'user'
+  const user = useUserStore((s) => s.user)
 
   // ----- 1) 用户消息：永远是纯文本气泡（user 不会下发结构化消息） -----
   if (isUser) {
+    const displayName = user?.username || user?.email || '我'
+    const fallback = (displayName[0] ?? '?').toUpperCase()
     return (
-      <div className='flex w-full justify-end'>
+      <div className='animate-in slide-in-from-bottom-1 fade-in-0 flex w-full items-center justify-end gap-2 duration-200'>
         <div className='bg-primary text-primary-foreground max-w-[80%] rounded-lg px-3 py-2 text-sm break-words whitespace-pre-wrap'>
           {content}
         </div>
+        <Avatar className='size-7 shrink-0'>
+          <AvatarImage
+            src={user?.avatarUrl ?? undefined}
+            alt={displayName}
+            referrerPolicy='no-referrer'
+          />
+          <AvatarFallback className='text-xs'>{fallback}</AvatarFallback>
+        </Avatar>
       </div>
     )
   }
@@ -93,24 +107,39 @@ export function ChatMessage({ message, onSendMessage, submitting }: ChatMessageP
 
     // payload 缺失时降级为文本兜底（一般不会发生，仅做防御）
     if (!card) {
-      return renderAssistantText(content, followUps, onSendMessage)
+      return renderAssistantText(content, followUps, false, onSendMessage)
     }
 
     return (
-      <div className='flex w-full flex-col items-start gap-2'>
-        {card}
-        {followUps && followUps.length > 0 ? (
-          <FollowUpChips
-            chips={followUps}
-            onPick={(chip) => onSendMessage({ command: chip.command, params: chip.params })}
-          />
-        ) : null}
+      <div className='animate-in slide-in-from-bottom-1 fade-in-0 flex w-full items-start gap-2 duration-200'>
+        <AssistantAvatar />
+        <div className='flex min-w-0 flex-1 flex-col items-start gap-2'>
+          {card}
+          {followUps && followUps.length > 0 ? (
+            <FollowUpChips
+              chips={followUps}
+              onPick={(chip) => onSendMessage({ command: chip.command, params: chip.params })}
+            />
+          ) : null}
+        </div>
       </div>
     )
   }
 
-  // ----- 3) Assistant 纯文本：markdown + 可选 FollowUpChips -----
-  return renderAssistantText(content, followUps, onSendMessage)
+  // ----- 3) Assistant 纯文本：markdown + 可选 FollowUpChips；isLoading 时显示 typing 动画 -----
+  return renderAssistantText(content, followUps, !!isLoading, onSendMessage)
+}
+
+/** AI 头像：用站点 logo（public/logo.svg）。 */
+function AssistantAvatar() {
+  return (
+    <Avatar className='bg-primary/5 size-7 shrink-0'>
+      <AvatarImage src='/logo.svg' alt='Noter AI' className='p-0.5' />
+      <AvatarFallback className='bg-primary/10 text-primary text-xs font-semibold'>
+        AI
+      </AvatarFallback>
+    </Avatar>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -181,30 +210,64 @@ function renderStructuredCard(
 function renderAssistantText(
   content: string,
   followUps: FollowUpChip[] | undefined,
+  isLoading: boolean,
   onSendMessage: (payload: SendMessageInput) => void
 ): React.ReactNode {
+  const showTyping = isLoading && content.length === 0
   return (
-    <div className='flex w-full flex-col items-start gap-2'>
-      <div
-        className={cn(
-          'bg-muted text-muted-foreground max-w-[85%] rounded-lg px-3 py-2 text-sm break-words',
-          'prose prose-sm dark:prose-invert max-w-none',
-          '[&_li]:my-0.5 [&_ol]:my-1 [&_p]:my-1 [&_ul]:my-1',
-          '[&_pre]:my-2 [&_pre]:rounded [&_pre]:bg-black/5 [&_pre]:p-2',
-          '[&_code]:rounded [&_code]:bg-black/5 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs'
-        )}>
-        {content ? (
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-        ) : (
-          <span className='text-muted-foreground/50'>...</span>
-        )}
+    <div className='animate-in slide-in-from-bottom-1 fade-in-0 flex w-full items-center gap-2 duration-200'>
+      <AssistantAvatar />
+      <div className='flex min-w-0 flex-1 flex-col items-start gap-2'>
+        <div
+          className={cn(
+            'bg-muted text-muted-foreground max-w-[85%] rounded-lg px-3 py-2 text-sm break-words',
+            'prose prose-sm dark:prose-invert max-w-none',
+            '[&_li]:my-0.5 [&_ol]:my-1 [&_p]:my-1 [&_ul]:my-1',
+            '[&_pre]:my-2 [&_pre]:rounded [&_pre]:bg-black/5 [&_pre]:p-2',
+            '[&_code]:rounded [&_code]:bg-black/5 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs'
+          )}>
+          {showTyping ? (
+            <TypingDots />
+          ) : content ? (
+            <>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+              {isLoading ? <BlinkingCaret /> : null}
+            </>
+          ) : (
+            <span className='text-muted-foreground/50'>...</span>
+          )}
+        </div>
+        {followUps && followUps.length > 0 ? (
+          <FollowUpChips
+            chips={followUps}
+            onPick={(chip) => onSendMessage({ command: chip.command, params: chip.params })}
+          />
+        ) : null}
       </div>
-      {followUps && followUps.length > 0 ? (
-        <FollowUpChips
-          chips={followUps}
-          onPick={(chip) => onSendMessage({ command: chip.command, params: chip.params })}
-        />
-      ) : null}
     </div>
+  )
+}
+
+/** 三点跳动 typing 指示器：用 tailwind 自带 animate-bounce + 错峰 delay 实现。 */
+function TypingDots() {
+  return (
+    <span
+      role='status'
+      aria-label='AI 正在思考'
+      className='inline-flex items-center gap-1 py-1 align-middle'>
+      <span className='bg-muted-foreground/60 h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.3s]' />
+      <span className='bg-muted-foreground/60 h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.15s]' />
+      <span className='bg-muted-foreground/60 h-1.5 w-1.5 animate-bounce rounded-full' />
+    </span>
+  )
+}
+
+/** 流式过程中的尾部光标，正文已开始累积时贴在末尾，提示 AI 还在输出。 */
+function BlinkingCaret() {
+  return (
+    <span
+      aria-hidden='true'
+      className='bg-muted-foreground/70 ml-0.5 inline-block h-3.5 w-[2px] translate-y-[2px] animate-pulse align-middle'
+    />
   )
 }

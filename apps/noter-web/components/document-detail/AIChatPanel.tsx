@@ -27,12 +27,24 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { Loader2, Maximize2, MessageSquare, PanelLeftClose, Send, Square, X } from 'lucide-react'
+import { Maximize2, MessageSquare, PanelLeftClose, RotateCcw, Send, Square, X } from 'lucide-react'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@noter/ui/components/alert-dialog'
 import { Button } from '@noter/ui/components/button'
 import { Input } from '@noter/ui/components/input'
 import { ScrollArea } from '@noter/ui/components/scroll-area'
 import { cn } from '@noter/ui/lib/utils'
+
+import { aiApi } from '@/lib/axios/ai'
 
 import { useDocumentDetailStore, type AIPanelSize } from '@/stores/documentDetail'
 import { useChatSessionStore } from '@/stores/chatSession'
@@ -75,6 +87,7 @@ export function AIChatPanel({ visible, onToggle, size, onSizeChange }: AIChatPan
   const launchpadVisible = useChatSessionStore((s) => s.launchpadVisible)
   const activeSession = useChatSessionStore((s) => s.activeSession)
   const appendMessage = useChatSessionStore((s) => s.appendMessage)
+  const resetForLaunchpad = useChatSessionStore((s) => s.resetForLaunchpad)
 
   const documentId = document?.id ?? ''
 
@@ -90,14 +103,16 @@ export function AIChatPanel({ visible, onToggle, size, onSizeChange }: AIChatPan
   const [mounted, setMounted] = useState(visible)
 
   const inputRef = useRef<HTMLInputElement>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  /** 消息列表内容容器 ref；它的 parent 即是 Radix ScrollArea 的 viewport */
+  const contentRef = useRef<HTMLDivElement>(null)
+  /** 是否处于"贴底"状态：true 时新消息 / 流式增长会自动滚到底；用户向上翻看后置 false */
+  const stickToBottomRef = useRef(true)
 
   // ===== 副作用：进出动画 / 自动滚动 =====
 
   // 关闭时延迟卸载，留出退场动画时间
   useEffect(() => {
     if (visible) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMounted(true)
       return
     }
@@ -105,15 +120,59 @@ export function AIChatPanel({ visible, onToggle, size, onSizeChange }: AIChatPan
     return () => clearTimeout(timer)
   }, [visible])
 
-  // 消息变化后滚动到底部
+  // 解析真实的滚动 viewport（Radix ScrollArea 内部容器，data-slot="scroll-area-viewport"）
+  const getViewport = useCallback((): HTMLElement | null => {
+    const node = contentRef.current
+    if (!node) return null
+    return node.closest<HTMLElement>('[data-slot="scroll-area-viewport"]')
+  }, [])
+
+  /** 把 viewport 滚到底；尊重 stickToBottomRef，仅在贴底状态下生效。 */
+  const maybeScrollToBottom = useCallback(
+    (force = false) => {
+      const v = getViewport()
+      if (!v) return
+      if (!force && !stickToBottomRef.current) return
+      // 用 rAF 等本帧 DOM commit 完成（新消息高度算出来）再滚
+      requestAnimationFrame(() => {
+        v.scrollTop = v.scrollHeight
+      })
+    },
+    [getViewport]
+  )
+
+  // 监听 viewport 的 scroll：用户手动向上翻 → 关闭跟随；拖回底部 → 恢复跟随
   useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    // 用 requestAnimationFrame 保证 DOM 已经追加新消息再滚动
-    requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight
+    if (!mounted) return
+    const v = getViewport()
+    if (!v) return
+    const onScroll = () => {
+      // 距离底部 ≤ 24px 视为贴底（容忍亚像素 / 内部 padding）
+      const distanceFromBottom = v.scrollHeight - v.clientHeight - v.scrollTop
+      stickToBottomRef.current = distanceFromBottom <= 24
+    }
+    v.addEventListener('scroll', onScroll, { passive: true })
+    return () => v.removeEventListener('scroll', onScroll)
+  }, [mounted, getViewport])
+
+  // ResizeObserver 监听内容尺寸变化（流式 content 增长 / 卡片渲染 / 占位插入都会触发）
+  useEffect(() => {
+    if (!mounted) return
+    const target = contentRef.current
+    if (!target || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      maybeScrollToBottom(false)
     })
-  }, [messageList])
+    ro.observe(target)
+    return () => ro.disconnect()
+  }, [mounted, maybeScrollToBottom])
+
+  // 消息条数变化时强制滚到底（包含用户主动发送 / 切换 SkillLaunchpad → 消息流的瞬间）
+  useEffect(() => {
+    // 用户主动操作（appendMessage 是手动调用的）等同明确意图回到底部
+    stickToBottomRef.current = true
+    maybeScrollToBottom(true)
+  }, [messageList.length, maybeScrollToBottom])
 
   // ===== 输入框 placeholder：根据 activeSession 联动 =====
   const placeholder = useMemo(
@@ -156,7 +215,19 @@ export function AIChatPanel({ visible, onToggle, size, onSizeChange }: AIChatPan
       const hasParams = !!input.params && Object.keys(input.params).length > 0
       if (!hasContent && !hasCommand && !hasParams) return
 
-      // 先把用户文本写入消息流（让用户立刻看到自己的气泡）。
+      // 先快照真实对话历史（后端仅看真实 user / assistant 文本，不看合成气泡 / 结构化卡片）。
+      const messagesPayload = useChatSessionStore
+        .getState()
+        .messageList.filter(
+          (m) => !m.messageType && !m.synthetic && (m.role === 'user' || m.role === 'assistant')
+        )
+        .map((m) => ({ role: m.role, content: m.content }))
+      // 自然语言路径再把当前文本拼到末尾（store 里的 user 气泡可能还没 flush）
+      if (hasContent) {
+        messagesPayload.push({ role: 'user', content: input.content!.trim() })
+      }
+
+      // 写入用户气泡（命令路径用合成气泡描述用户操作；自然语言路径写真实文本）。
       if (hasContent) {
         const userMsg: ChatMessageType = {
           id: createMessageId(),
@@ -165,20 +236,30 @@ export function AIChatPanel({ visible, onToggle, size, onSizeChange }: AIChatPan
           createdAt: Date.now()
         }
         appendMessage(userMsg)
-      } else if (hasCommand || hasParams) {
-        // 命令式触发（Launchpad / SlashCommand / FollowUp / Quiz Card）也要让
-        // launchpad 隐藏并切到消息流——store.appendMessage 才会同步 launchpadVisible，
-        // 但这种入口没有用户文本可追加；此时消息流仍可能为空，让 useChatStream
-        // 自己创建 assistant 消息时再隐藏 launchpad（同样会触发 setState）。
+      } else {
+        const label = describeUserAction(input.command, input.params)
+        if (label) {
+          const userMsg: ChatMessageType = {
+            id: createMessageId(),
+            role: 'user',
+            content: label,
+            createdAt: Date.now(),
+            synthetic: true
+          }
+          appendMessage(userMsg)
+        }
       }
 
-      // 构造对话历史：仅取纯文本消息（结构化消息不进 messages 数组发往后端）。
-      // 注意：因为 React state 是异步的，hasContent 路径下我们刚 appendMessage 还没生效；
-      // 直接从最新 store 读取最稳妥。
-      const latestList = useChatSessionStore.getState().messageList
-      const messagesPayload = latestList
-        .filter((m) => !m.messageType && (m.role === 'user' || m.role === 'assistant'))
-        .map((m) => ({ role: m.role, content: m.content }))
+      // 立即追加 assistant 占位（typing 动画），让用户看到"AI 在思考"反馈；
+      // useChatStream 在收到首个 content 时会就地升级为正文，收到 structured_message 时丢弃占位再插卡片。
+      const placeholder: ChatMessageType = {
+        id: createMessageId(),
+        role: 'assistant',
+        content: '',
+        createdAt: Date.now(),
+        isLoading: true
+      }
+      appendMessage(placeholder)
 
       try {
         await sendMessage({
@@ -308,6 +389,34 @@ export function AIChatPanel({ visible, onToggle, size, onSizeChange }: AIChatPan
     abort()
   }, [abort])
 
+  // ===== 重置：清空对话流，恢复到 SkillLaunchpad =====
+
+  const [resetOpen, setResetOpen] = useState(false)
+  const [resetting, setResetting] = useState(false)
+
+  const handleConfirmReset = useCallback(async () => {
+    setResetting(true)
+    try {
+      // 流式中先打断（abort 是同步的，无需 await）
+      abort()
+      // 后端 session 标记 ended，避免脏数据；失败时不阻塞前端清理（消息已经无意义）
+      const sessionId = activeSession?.id
+      if (sessionId) {
+        try {
+          await aiApi.endSession(sessionId)
+        } catch (err) {
+          console.error('[AIChatPanel] endSession on reset failed', err)
+        }
+      }
+      resetForLaunchpad()
+      setResetOpen(false)
+    } finally {
+      setResetting(false)
+    }
+  }, [abort, activeSession?.id, resetForLaunchpad])
+
+  const canReset = messageList.length > 0 || activeSession !== null
+
   if (!mounted) return null
 
   const isInputEmpty = inputValue.trim().length === 0
@@ -330,6 +439,16 @@ export function AIChatPanel({ visible, onToggle, size, onSizeChange }: AIChatPan
           AI 问答
         </div>
         <div className='flex items-center gap-1'>
+          {/* 重置对话：清空消息流并退出当前活跃 session */}
+          <Button
+            variant='ghost'
+            size='icon-sm'
+            disabled={!canReset}
+            onClick={() => setResetOpen(true)}
+            aria-label='重置对话'
+            title='重置对话'>
+            <RotateCcw className='h-4 w-4' />
+          </Button>
           {/* 向上拉长：覆盖文档元数据 */}
           <Button
             variant='ghost'
@@ -365,7 +484,7 @@ export function AIChatPanel({ visible, onToggle, size, onSizeChange }: AIChatPan
 
       {/* 主内容区：SkillLaunchpad 或 消息流 */}
       <ScrollArea className='flex-1 overflow-hidden'>
-        <div ref={scrollRef} className='flex h-full flex-col gap-3 overflow-y-auto p-4'>
+        <div ref={contentRef} className='flex h-full flex-col gap-3 p-4'>
           {showLaunchpad ? (
             <div className='flex h-full flex-col gap-4'>
               <SkillLaunchpad size={size} onPickSkill={handleLaunchpadPick} />
@@ -385,14 +504,6 @@ export function AIChatPanel({ visible, onToggle, size, onSizeChange }: AIChatPan
                   submitting={isStreaming}
                 />
               ))}
-              {isStreaming &&
-                (messageList.length === 0 ||
-                  messageList[messageList.length - 1].role === 'user') && (
-                  <div className='flex items-center gap-2 px-1'>
-                    <Loader2 className='text-muted-foreground h-3 w-3 animate-spin' />
-                    <span className='text-muted-foreground text-xs'>思考中...</span>
-                  </div>
-                )}
             </>
           )}
         </div>
@@ -435,6 +546,28 @@ export function AIChatPanel({ visible, onToggle, size, onSizeChange }: AIChatPan
           )}
         </div>
       </div>
+
+      {/* 重置对话二次确认 */}
+      <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认重置当前对话？</AlertDialogTitle>
+            <AlertDialogDescription>
+              将清空所有消息记录{activeSession ? '并退出当前会话' : ''}
+              ，并回到启动面板。此操作不可撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resetting}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant='destructive'
+              onClick={handleConfirmReset}
+              disabled={resetting}>
+              {resetting ? '重置中...' : '确认重置'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -448,4 +581,47 @@ function createMessageId(): string {
     return crypto.randomUUID()
   }
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+/**
+ * 把命令路径（Launchpad 卡 / SlashCommand 选中 / FollowUp chip / Quiz 卡内提交）
+ * 描述为用户视角的可读 label，用于合成用户气泡（synthetic=true）。
+ *
+ * 这条气泡仅展示给用户看，不会进入发往后端的对话历史；保持 UI 反馈一致即可，
+ * 文案不必精确等同后端 SkillManifest.label。
+ */
+function describeUserAction(
+  command: SkillName | undefined,
+  params: Record<string, unknown> | undefined
+): string | null {
+  // /quiz 三阶段判定：configuring 触发 + count → answering；answering 提交 answers → graded
+  if (params && Object.prototype.hasOwnProperty.call(params, 'config')) {
+    const cfg = params.config as { count?: number } | undefined
+    const count = cfg && typeof cfg.count === 'number' ? cfg.count : undefined
+    return count ? `开始测验，${count} 题` : '开始测验'
+  }
+  if (params && Object.prototype.hasOwnProperty.call(params, 'answers')) {
+    return '提交答卷'
+  }
+  if (params && params.exit === true) {
+    return '退出当前会话'
+  }
+  if (!command) return null
+  switch (command) {
+    case '/brief':
+      return '📖 速览这篇'
+    case '/tutor':
+      return '🎓 章节私教'
+    case '/quiz':
+      return '📝 考考我'
+    case '/actions':
+      return '✅ 行动项提取'
+    case '/explain': {
+      const concept =
+        params && typeof params.concept === 'string' && params.concept.trim().length > 0
+          ? params.concept.trim()
+          : null
+      return concept ? `💡 解释：${concept}` : '💡 解释概念'
+    }
+  }
 }

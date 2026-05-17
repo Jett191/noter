@@ -196,6 +196,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
         if (abortControllerRef.current === controller) {
           abortControllerRef.current = null
         }
+        // 流结束时如果末尾仍带 isLoading：空占位删掉、有内容则关掉 isLoading（让 BlinkingCaret 消失）
+        finalizeTrailingLoading()
       }
     },
     [documentId, optionSessionId]
@@ -411,6 +413,9 @@ function appendContentChunk(content: string): void {
     if (last && last.role === 'assistant' && !last.messageType) {
       const merged: ChatMessage = {
         ...last,
+        // 末尾若是 isLoading 占位（content=''），首次 content 到达时升级为正文。
+        // **保留 isLoading=true** 让 ChatMessage 在末尾追加 BlinkingCaret 提示流式仍在进行；
+        // 流结束（pumpSSE 完成 / [DONE] / 错误 / abort）时由 finalizeTrailingLoading 关掉。
         content: last.content + content
       }
       return {
@@ -419,12 +424,13 @@ function appendContentChunk(content: string): void {
         launchpadVisible: false
       }
     }
-    // 新建 assistant 文本消息
+    // 新建 assistant 文本消息（流首帧未先经过 typing 占位的边缘情况）
     const created: ChatMessage = {
       id: createMessageId(),
       role: 'assistant',
       content,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      isLoading: true
     }
     return {
       messageList: [...list, created],
@@ -435,15 +441,28 @@ function appendContentChunk(content: string): void {
 
 /** 新增一条结构化消息（BriefCard / TutorTurnCard / ... / QuizResultCard）。 */
 function appendStructuredMessage(messageType: StructuredMessageType, payload: unknown): void {
-  const msg: ChatMessage = {
-    id: createMessageId(),
-    role: 'assistant',
-    content: '',
-    messageType,
-    payload,
-    createdAt: Date.now()
-  }
-  useChatSessionStore.getState().appendMessage(msg)
+  // 若末尾是 isLoading 占位（command 路径预先插入的 typing 气泡），先把它丢掉，
+  // 让结构化卡片直接顶替；避免「typing 气泡 + 卡片」两条同时出现。
+  useChatSessionStore.setState((s) => {
+    const list = s.messageList
+    const last = list[list.length - 1]
+    const trimmedList =
+      last && last.role === 'assistant' && last.isLoading && !last.messageType
+        ? list.slice(0, -1)
+        : list
+    const created: ChatMessage = {
+      id: createMessageId(),
+      role: 'assistant',
+      content: '',
+      messageType,
+      payload,
+      createdAt: Date.now()
+    }
+    return {
+      messageList: [...trimmedList, created],
+      launchpadVisible: false
+    }
+  })
 }
 
 /**
@@ -466,13 +485,43 @@ function attachFollowUps(chips: FollowUpChip[]): void {
 
 /** 追加一条 assistant 文本错误消息（与 fallback 路径共用）。 */
 function appendErrorMessage(text: string): void {
-  const msg: ChatMessage = {
-    id: createMessageId(),
-    role: 'assistant',
-    content: text,
-    createdAt: Date.now()
-  }
-  useChatSessionStore.getState().appendMessage(msg)
+  // 错误消息也要替换掉末尾的 isLoading 占位，避免「typing 气泡 + 错误气泡」并存
+  useChatSessionStore.setState((s) => {
+    const list = s.messageList
+    const last = list[list.length - 1]
+    const trimmed =
+      last && last.role === 'assistant' && last.isLoading && !last.messageType
+        ? list.slice(0, -1)
+        : list
+    const created: ChatMessage = {
+      id: createMessageId(),
+      role: 'assistant',
+      content: text,
+      createdAt: Date.now()
+    }
+    return { messageList: [...trimmed, created], launchpadVisible: false }
+  })
+}
+
+/**
+ * 流式收尾：处理末尾 assistant 消息的 isLoading 状态：
+ *   - 末尾是空占位（isLoading=true 且 content='') → 直接从列表移除（无内容，避免悬空 typing 动画）
+ *   - 末尾是流式正文（isLoading=true 且 content 非空） → 关掉 isLoading（让 BlinkingCaret 消失）
+ *   - 其他情况不动
+ */
+function finalizeTrailingLoading(): void {
+  useChatSessionStore.setState((s) => {
+    const list = s.messageList
+    const last = list[list.length - 1]
+    if (!last || last.role !== 'assistant' || last.messageType || !last.isLoading) {
+      return s
+    }
+    if (last.content.length === 0) {
+      return { messageList: list.slice(0, -1) }
+    }
+    const merged: ChatMessage = { ...last, isLoading: false }
+    return { messageList: [...list.slice(0, -1), merged] }
+  })
 }
 
 // ===========================================================================

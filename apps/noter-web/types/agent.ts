@@ -289,4 +289,15 @@ export interface ChatMessage {
   createdAt: number
   /** 单轮 Skill 末尾的 follow-up chips */
   followUps?: FollowUpChip[]
+  /**
+   * 仅 assistant 占位消息使用：当 SSE 还未下发任何内容时挂一条带 isLoading=true 的
+   * 占位消息，前端渲染 typing 动画；第一帧 content 到达时改为 false 转为正文流式。
+   */
+  isLoading?: boolean
+  /**
+   * 仅前端展示用的"合成"消息（例如用户点 SkillLaunchpad 卡片时生成的伪用户气泡，
+   * 或多轮 Quiz 卡内提交生成的"提交答卷"气泡）。这类消息**不**进入发往后端的
+   * `messages` 历史数组——后端接收的对话历史只包含真实键入的 user / assistant 文本。
+   */
+  synthetic?: boolean
 }
