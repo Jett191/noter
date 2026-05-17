@@ -13,6 +13,7 @@ import { TagFilterList } from '@/components/documents/side-panel/TagFilterList'
 import { DocumentsHeader } from '@/components/documents/DocumentsHeader'
 import { Button } from '@noter/ui/components/button'
 import { Spinner } from '@noter/ui/components/spinner'
+import { ChevronDown } from 'lucide-react'
 
 export default function DocumentsPage() {
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -103,21 +104,49 @@ export default function DocumentsPage() {
             onUpload={() => setUploadOpen(true)}
           />
 
-          {/* 加载更多 */}
-          {hasMore && !loading && (
-            <div className='flex justify-center py-6'>
-              <Button variant='outline' onClick={loadMore} disabled={loadingMore}>
-                {loadingMore && <Spinner data-icon='inline-start' />}
-                {loadingMore ? '加载中...' : `加载更多（共 ${total} 篇）`}
-              </Button>
-            </div>
-          )}
+          {/* 加载更多 / 已显示全部 */}
+          {(hasMore || documents.length > 0) && !loading && (
+            <div
+              className='flex items-center gap-6 pl-6'
+              style={{ marginTop: '128px', marginBottom: '48px' }}>
+              {/* 左侧：副标题 + 主行动 */}
+              <div className='flex flex-col items-start gap-1'>
+                <span className='text-muted-foreground/80 text-[10px] font-medium tracking-[0.2em] uppercase'>
+                  {hasMore ? `${documents.length} / ${total} documents` : `${total} documents`}
+                </span>
+                {hasMore ? (
+                  <button
+                    type='button'
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className='group text-foreground inline-flex items-center gap-2 text-xl font-semibold tracking-tight transition-opacity disabled:opacity-60'>
+                    {loadingMore ? (
+                      <>
+                        <Spinner data-icon='inline-start' />
+                        <span>加载中</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className='bg-foreground/10 group-hover:bg-foreground/20 -mx-1 rounded-md px-1 transition-colors'>
+                          加载更多
+                        </span>
+                        <ChevronDown className='size-5 transition-transform duration-200 group-hover:translate-y-0.5' />
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <span className='text-foreground/80 text-xl font-semibold tracking-tight'>
+                    已经到底啦
+                  </span>
+                )}
+              </div>
 
-          {/* 已加载全部提示 */}
-          {!hasMore && documents.length > 0 && !loading && (
-            <p className='text-muted-foreground py-6 text-center text-sm'>
-              已显示全部 {total} 篇文档
-            </p>
+              {/* 右侧：渐变分隔线（占满剩余空间） */}
+              <div
+                className='via-border h-px flex-1 bg-gradient-to-r from-transparent to-transparent'
+                aria-hidden
+              />
+            </div>
           )}
 
           <UploadDialog

@@ -156,7 +156,7 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
   const handleUploadSingle = async () => {
     const file = queue[0]?.file
     if (!file) return
-    setPhase('uploading')
+    // 单文件场景不切换 phase，仍由 uploading / documentId / uploadError 驱动 UI
     setUploading(true)
     setUploadError(null)
     try {
@@ -171,7 +171,7 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
     }
   }
 
-  /** 多文件上传：顺序调用 upload 接口，不在弹窗内逐个轮询解析（解析在后台进行） */
+  /** 多文件上传：顺序调用 upload 接口，全部完成后再统一刷新一次列表，避免反复闪烁 */
   const handleUploadBatch = async () => {
     setPhase('uploading')
     setProgressIndex(0)
@@ -187,8 +187,6 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
         await uploadOneRequest(item.file)
         success += 1
         setSuccessCount(success)
-        // 每成功一个就刷新列表，让用户能立刻在外面看到
-        onUploadComplete()
       } catch (err) {
         failures.push({
           name: item.file.name,
@@ -198,6 +196,10 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
       }
     }
     setPhase('done')
+    // 全部上传结束后统一刷新一次列表，避免逐个文件触发 reset 导致网格反复闪烁
+    if (success > 0) {
+      onUploadComplete()
+    }
   }
 
   const handleUpload = () => {
