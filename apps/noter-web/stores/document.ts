@@ -1,7 +1,29 @@
 import { create } from 'zustand'
 import { documentApi } from '@/lib/axios/documents'
 import { useFolderStore } from '@/stores/folders'
-import type { Document } from '@/types/document'
+import type { Document, ListParams } from '@/types/document'
+
+export type SortField = NonNullable<ListParams['orderBy']>
+export type SortOrder = NonNullable<ListParams['order']>
+export type StatusFilter = NonNullable<ListParams['status']>
+
+export interface DocumentFilters {
+  /** 整体状态：ready / processing / failed */
+  status: StatusFilter | null
+  /** 是否仅看收藏 */
+  favoriteOnly: boolean
+  /** 文件扩展名（多选 OR） */
+  fileExts: string[]
+  /** 创建时间范围：以"近 N 天"表达，发请求时转换为 ISO；null 表示不限 */
+  createdWithinDays: number | null
+}
+
+const DEFAULT_FILTERS: DocumentFilters = {
+  status: null,
+  favoriteOnly: false,
+  fileExts: [],
+  createdWithinDays: null
+}
 
 interface DocumentState {
   documents: Document[]
@@ -13,15 +35,47 @@ interface DocumentState {
   error: string | null
   selectedTags: string[]
   hasMore: boolean
+  // 排序
+  orderBy: SortField
+  order: SortOrder
+  // 筛选
+  filters: DocumentFilters
+  // setters
   setPage: (page: number) => void
   setPageSize: (size: number) => void
   setSelectedTags: (tags: string[]) => void
+  setSort: (orderBy: SortField, order: SortOrder) => void
+  setFilters: (patch: Partial<DocumentFilters>) => void
+  resetFilters: () => void
+  // actions
   fetchDocuments: () => Promise<void>
   loadMore: () => Promise<void>
   reset: () => void
   deleteDocument: (id: string) => Promise<void>
   uploadCover: (id: string, file: File) => Promise<void>
   resetCover: (id: string) => Promise<void>
+}
+
+/** 把 store 当前状态转换成 list 接口的查询参数 */
+function buildListParams(state: DocumentState, page: number): ListParams {
+  const { selectedTags, filters, orderBy, order, pageSize } = state
+  const { selectedFolderId } = useFolderStore.getState()
+  const createdFrom =
+    filters.createdWithinDays != null
+      ? new Date(Date.now() - filters.createdWithinDays * 24 * 60 * 60 * 1000).toISOString()
+      : undefined
+  return {
+    page,
+    pageSize,
+    tagIds: selectedTags.length > 0 ? selectedTags : undefined,
+    folderId: selectedFolderId ?? undefined,
+    status: filters.status ?? undefined,
+    isFavorite: filters.favoriteOnly ? 1 : undefined,
+    fileExts: filters.fileExts.length > 0 ? filters.fileExts : undefined,
+    createdFrom,
+    orderBy,
+    order
+  }
 }
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
@@ -34,6 +88,9 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   error: null,
   selectedTags: [],
   hasMore: false,
+  orderBy: 'created_at',
+  order: 'desc',
+  filters: DEFAULT_FILTERS,
 
   setPage: (page) => {
     set({ page })
@@ -50,30 +107,37 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     get().fetchDocuments()
   },
 
+  setSort: (orderBy, order) => {
+    set({ orderBy, order, page: 1, documents: [] })
+    get().fetchDocuments()
+  },
+
+  setFilters: (patch) => {
+    set({ filters: { ...get().filters, ...patch }, page: 1, documents: [] })
+    get().fetchDocuments()
+  },
+
+  resetFilters: () => {
+    set({ filters: DEFAULT_FILTERS, page: 1, documents: [] })
+    get().fetchDocuments()
+  },
+
   reset: () => {
     set({ page: 1, documents: [] })
     get().fetchDocuments()
   },
 
   fetchDocuments: async () => {
-    const { page, pageSize, selectedTags } = get()
-    const { selectedFolderId } = useFolderStore.getState()
+    const state = get()
     set({ loading: true, error: null })
     try {
-      const result = await documentApi.list({
-        page,
-        pageSize,
-        tagIds: selectedTags.length > 0 ? selectedTags : undefined,
-        folderId: selectedFolderId ?? undefined,
-        orderBy: 'created_at',
-        order: 'desc'
-      })
+      const result = await documentApi.list(buildListParams(state, state.page))
       const items = result?.items ?? []
       const total = result?.total ?? 0
       set({
         documents: items,
         total,
-        hasMore: page * pageSize < total,
+        hasMore: state.page * state.pageSize < total,
         loading: false
       })
     } catch (err) {
@@ -85,26 +149,18 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   loadMore: async () => {
-    const { page, pageSize, selectedTags, documents } = get()
-    const { selectedFolderId } = useFolderStore.getState()
-    const nextPage = page + 1
+    const state = get()
+    const nextPage = state.page + 1
     set({ loadingMore: true, error: null })
     try {
-      const result = await documentApi.list({
-        page: nextPage,
-        pageSize,
-        tagIds: selectedTags.length > 0 ? selectedTags : undefined,
-        folderId: selectedFolderId ?? undefined,
-        orderBy: 'created_at',
-        order: 'desc'
-      })
+      const result = await documentApi.list(buildListParams(state, nextPage))
       const items = result?.items ?? []
       const total = result?.total ?? 0
       set({
-        documents: [...documents, ...items],
+        documents: [...state.documents, ...items],
         total,
         page: nextPage,
-        hasMore: nextPage * pageSize < total,
+        hasMore: nextPage * state.pageSize < total,
         loadingMore: false
       })
     } catch (err) {

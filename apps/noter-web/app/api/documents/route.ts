@@ -22,11 +22,33 @@ export const GET = handler(async (request: Request) => {
     pageSize: url.searchParams.get('pageSize') ?? undefined,
     orderBy: url.searchParams.get('orderBy') ?? undefined,
     order: url.searchParams.get('order') ?? undefined,
-    tagIds: url.searchParams.getAll('tagIds').length ? url.searchParams.getAll('tagIds') : undefined
+    tagIds: url.searchParams.getAll('tagIds').length
+      ? url.searchParams.getAll('tagIds')
+      : undefined,
+    fileExts: url.searchParams.getAll('fileExts').length
+      ? url.searchParams.getAll('fileExts')
+      : undefined,
+    status: url.searchParams.get('status') ?? undefined,
+    isFavorite: url.searchParams.get('isFavorite') ?? undefined,
+    isArchived: url.searchParams.get('isArchived') ?? undefined,
+    createdFrom: url.searchParams.get('createdFrom') ?? undefined,
+    createdTo: url.searchParams.get('createdTo') ?? undefined
   }
 
   const params = listDocumentsSchema.parse(rawParams)
-  const { page, pageSize, tagIds, orderBy, order } = params
+  const {
+    page,
+    pageSize,
+    tagIds,
+    orderBy,
+    order,
+    status,
+    isFavorite,
+    isArchived,
+    fileExts,
+    createdFrom,
+    createdTo
+  } = params
   const folderId = url.searchParams.get('folderId')
 
   // 计算分页范围
@@ -43,6 +65,32 @@ export const GET = handler(async (request: Request) => {
   // 文件夹筛选
   if (folderId) {
     query = query.eq('folder_id', folderId)
+  }
+
+  // 状态筛选
+  if (status) {
+    query = query.eq('status', status)
+  }
+
+  // 收藏 / 归档筛选
+  if (typeof isFavorite === 'number') {
+    query = query.eq('is_favorite', isFavorite)
+  }
+  if (typeof isArchived === 'number') {
+    query = query.eq('is_archived', isArchived)
+  }
+
+  // 文件扩展名筛选（OR）
+  if (fileExts && fileExts.length > 0) {
+    query = query.in('file_ext', fileExts)
+  }
+
+  // 创建时间范围
+  if (createdFrom) {
+    query = query.gte('created_at', createdFrom)
+  }
+  if (createdTo) {
+    query = query.lte('created_at', createdTo)
   }
 
   // 标签筛选（OR 逻辑：文档关联了任一选中标签即匹配）

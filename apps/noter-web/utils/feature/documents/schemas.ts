@@ -11,7 +11,7 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024
 
 /**
  * 文档列表查询参数 Schema
- * 用于 GET /api/documents 分页 + 标签筛选 + 排序
+ * 用于 GET /api/documents 分页 + 标签 / 元数据筛选 + 排序
  */
 export const listDocumentsSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -22,7 +22,21 @@ export const listDocumentsSchema = z.object({
     })
     .default(10),
   tagIds: z.array(z.string().regex(uuidRegex, '标签 ID 格式不正确')).optional(),
-  orderBy: z.enum(['created_at', 'title', 'file_size']).default('created_at').optional(),
+  /** 文档整体状态：ready / processing / failed */
+  status: z.enum(['ready', 'processing', 'failed']).optional(),
+  /** 是否收藏：0/1 */
+  isFavorite: z.coerce.number().int().min(0).max(1).optional(),
+  /** 是否归档：0/1 */
+  isArchived: z.coerce.number().int().min(0).max(1).optional(),
+  /** 文件扩展名（多选 OR），与 ALLOWED_EXTENSIONS 对齐 */
+  fileExts: z.array(z.enum(ALLOWED_EXTENSIONS)).optional(),
+  /** 创建时间范围（ISO 字符串） */
+  createdFrom: z.string().datetime().optional(),
+  createdTo: z.string().datetime().optional(),
+  orderBy: z
+    .enum(['created_at', 'updated_at', 'title', 'file_size', 'word_count'])
+    .default('created_at')
+    .optional(),
   order: z.enum(['asc', 'desc']).default('desc').optional()
 })
 export type ListDocumentsInput = z.infer<typeof listDocumentsSchema>
