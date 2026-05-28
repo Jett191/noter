@@ -42,8 +42,7 @@ next-env.d.ts
 # Node modules
 node_modules/
 
-# Build output
-lib/
+
 
 # Logs
 logs
