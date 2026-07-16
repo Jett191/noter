@@ -16,9 +16,31 @@ export function SummaryCard({ summary }: SummaryCardProps) {
   const regenerateSummary = useDocumentDetailStore((s) => s.regenerateSummary)
 
   const isRunning = summaryStatus === 'running'
+  const isPending = summaryStatus === 'pending' || summaryStatus === 'running'
+  const hasSummary = summary && summary.summary
+
+  // 生成中占位（后端正在处理）
+  if (!hasSummary && isPending) {
+    return (
+      <Card>
+        <CardHeader className='flex-row items-center justify-between pb-3'>
+          <CardTitle className='flex items-center gap-2 text-base'>
+            <Sparkles className='text-primary h-4 w-4' />
+            AI 总结
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className='flex flex-col items-center justify-center gap-3 py-8'>
+            <Loader2 className='text-primary h-6 w-6 animate-spin' />
+            <p className='text-muted-foreground text-sm'>AI 正在生成总结，请稍候...</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   // 空状态
-  if (!summary || !summary.summary) {
+  if (!hasSummary) {
     return (
       <div className='border-muted-foreground/30 bg-muted/10 flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed py-12'>
         <Sparkles className='text-muted-foreground/40 h-8 w-8' />

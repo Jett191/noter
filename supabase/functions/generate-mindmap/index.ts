@@ -345,12 +345,11 @@ Deno.serve(async (req) => {
         const supabase = createClient(supabaseUrl, supabaseServiceKey)
         const now = new Date().toISOString()
 
-        // Update mindmap_status = 'failed' and documents.status = 'failed'
+        // Mark mindmap_status as failed only — 不影响文档整体可阅读性
         await supabase
           .from('documents')
           .update({
             mindmap_status: 'failed',
-            status: 'failed',
             updated_at: now
           })
           .eq('id', documentId)

@@ -1,13 +1,16 @@
 'use client'
 
 import { Button } from '@noter/ui/components/button'
+import { cn } from '@noter/ui/lib/utils'
 import { Download } from 'lucide-react'
 
 interface DownloadButtonProps {
   title: string
+  iconOnly?: boolean
+  className?: string
 }
 
-export function DownloadButton({ title }: DownloadButtonProps) {
+export function DownloadButton({ title, iconOnly = false, className }: DownloadButtonProps) {
   const handleDownload = () => {
     // 获取文档正文区域的 HTML
     const articleEl = document.querySelector('main article')
@@ -60,8 +63,26 @@ export function DownloadButton({ title }: DownloadButtonProps) {
     }, 500)
   }
 
+  if (iconOnly) {
+    return (
+      <Button
+        variant='ghost'
+        size='icon-sm'
+        onClick={handleDownload}
+        aria-label='下载文档 PDF'
+        className={cn('rounded-full', className)}>
+        <Download className='h-4 w-4' />
+      </Button>
+    )
+  }
+
   return (
-    <Button variant='outline' size='sm' onClick={handleDownload} aria-label='下载文档 PDF'>
+    <Button
+      variant='outline'
+      size='sm'
+      onClick={handleDownload}
+      aria-label='下载文档 PDF'
+      className={className}>
       <Download className='h-4 w-4' />
       <span className='ml-1.5'>下载</span>
     </Button>

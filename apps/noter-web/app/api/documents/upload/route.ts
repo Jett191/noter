@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { handler } from '@/utils/http/handler'
 import { success, error } from '@/utils/http/response'
 import { uploadDocumentSchema } from '@/utils/feature/documents/schemas'
+import { readSetting } from '@/lib/settings/readSetting'
 import type { Document } from '@/types/document'
 
 /** 根据文件扩展名推断 MIME 类型 */
@@ -28,7 +29,14 @@ export const POST = handler(async (request: Request) => {
     return error('未登录', 401)
   }
 
-  // 2. 解析 FormData
+  // 2. 系统开关检查 (admin-platform task 17.5 / Requirements 24):
+  //    管理员可在 noter-admin /settings 关闭普通用户上传;关闭时整条上传 API 返回 403。
+  const allowUpload = await readSetting('allow_user_upload')
+  if (!allowUpload) {
+    return error('当前不允许上传文档', 403)
+  }
+
+  // 3. 解析 FormData
   const formData = await request.formData()
   const file = formData.get('file')
 
@@ -36,22 +44,22 @@ export const POST = handler(async (request: Request) => {
     return error('请选择要上传的文件', 400)
   }
 
-  // 3. 校验文件名和大小
+  // 4. 校验文件名和大小
   uploadDocumentSchema.parse({
     fileName: file.name,
     fileSize: file.size
   })
 
-  // 4. 提取文件信息
+  // 5. 提取文件信息
   const originalFilename = file.name
   const fileExt = originalFilename.split('.').pop()?.toLowerCase() ?? ''
   const mimeType = getMimeType(fileExt)
   const title = originalFilename.replace(/\.[^/.]+$/, '') // 去掉扩展名作为标题
 
-  // 5. 生成文档 ID
+  // 6. 生成文档 ID
   const documentId = crypto.randomUUID()
 
-  // 6. 上传文件到 document-originals 桶
+  // 7. 上传文件到 document-originals 桶
   const storagePath = `${user.id}/${documentId}`
   const fileBuffer = await file.arrayBuffer()
 
@@ -66,10 +74,10 @@ export const POST = handler(async (request: Request) => {
     return error(`文件上传失败: ${uploadError.message}`, 500)
   }
 
-  // 7. 获取 folderId（从 FormData 中）
+  // 8. 获取 folderId（从 FormData 中）
   const folderId = formData.get('folderId') as string | null
 
-  // 8. 创建文档记录
+  // 9. 创建文档记录
   const { data: document, error: insertError } = await supabase
     .from('documents')
     .insert({
@@ -87,7 +95,7 @@ export const POST = handler(async (request: Request) => {
       vector_status: 'pending',
       summary_status: 'pending',
       mindmap_status: 'pending',
-      folder_id: folderId || null,
+      folder_id: folderId || null
     })
     .select()
     .single()
@@ -98,7 +106,7 @@ export const POST = handler(async (request: Request) => {
     return error(`创建文档记录失败: ${insertError.message}`, 500)
   }
 
-  // 8. 异步触发 parse-document Edge Function（不等待结果）
+  // 10. 异步触发 parse-document Edge Function（不等待结果）
   supabase.functions.invoke('parse-document', {
     body: {
       documentId,
@@ -107,7 +115,7 @@ export const POST = handler(async (request: Request) => {
     }
   })
 
-  // 9. 立即返回创建的文档记录
+  // 11. 立即返回创建的文档记录
   const result: Document = {
     id: document.id,
     userId: document.user_id,
@@ -131,6 +139,7 @@ export const POST = handler(async (request: Request) => {
     isArchived: document.is_archived,
     deleted: document.deleted,
     folderId: document.folder_id ?? null,
+    coverUrl: document.cover_url ?? null,
     tags: [],
     createdAt: document.created_at,
     updatedAt: document.updated_at

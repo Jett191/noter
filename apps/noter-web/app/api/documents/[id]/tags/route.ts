@@ -31,7 +31,7 @@ export const POST = handler(async (request: Request, { params }: RouteContext) =
     .eq('id', id)
     .eq('user_id', user.id)
     .eq('deleted', 0)
-    .single()
+    .maybeSingle()
 
   if (docError || !document) {
     return error('文档不存在', 404)
@@ -41,15 +41,27 @@ export const POST = handler(async (request: Request, { params }: RouteContext) =
   const body = await request.json()
   const { tagId } = addTagSchema.parse(body)
 
-  // 检查标签是否已关联
+  // 验证标签存在且属于当前用户
+  const { data: tag, error: tagError } = await supabase
+    .from('tags')
+    .select('id')
+    .eq('id', tagId)
+    .eq('user_id', user.id)
+    .eq('deleted', 0)
+    .maybeSingle()
+
+  if (tagError || !tag) {
+    return error('标签不存在', 404)
+  }
+
+  // 检查是否已关联（document_tags 用真删除，存在即代表当前已关联）
   const { data: existing } = await supabase
     .from('document_tags')
     .select('id')
     .eq('document_id', id)
     .eq('tag_id', tagId)
     .eq('user_id', user.id)
-    .eq('deleted', 0)
-    .single()
+    .maybeSingle()
 
   if (existing) {
     return error('标签已关联', 400)

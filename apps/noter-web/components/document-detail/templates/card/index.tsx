@@ -6,7 +6,7 @@ import type { TemplateConfig } from '@/types/template'
 export const cardTemplate: TemplateConfig = {
   name: 'card',
   label: '卡片',
-  description: '内容分块，卡片式布局，视觉层次分明',
+  description: '分块卡片，层次分明',
   wrapperClassName: 'p-4 md:p-8 space-y-6',
   components: {
     h1: ({ children, id }) => (

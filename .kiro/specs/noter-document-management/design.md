@@ -125,13 +125,17 @@ sequenceDiagram
 ```
 components/
 ├── documents/                        # 文档列表页组件
+│   ├── DocumentsHeader.tsx           # 顶部 sticky 胶囊导航：logo / 品牌 / SearchBar / 上传 / UserAvatarDropdown
 │   ├── DocumentGrid.tsx
-│   ├── DocumentCard.tsx              # 电影海报比例 (aspect-[2/3], max-w-[160px])
-│   ├── PaginationController.tsx
-│   ├── SearchBar.tsx
+│   ├── DocumentCard.tsx              # 电影海报比例 (aspect-[2/3], max-w-[160px])，整张以封面为背景，底部毛玻璃面板
+│   ├── DocumentCardMenu.tsx          # 卡片左上角三点菜单：更换背景图 / 恢复默认封面 / 删除文档
+│   ├── PaginationController.tsx      # ⚠️ 已下线，被 LoadMoreController 替代（保留文件以便回滚）
+│   ├── LoadMoreController.tsx        # 「X / Y documents」+「加载更多」+「已经到底啦」终态（也可直接在 page.tsx 中实现）
+│   ├── SearchBar.tsx                 # 顶部胶囊内的全站搜索；防抖 300ms / 超时 10s / 命中类型 chip / 客户端高亮兜底
 │   ├── FilterSortBar.tsx             # Notion 风格筛选排序栏
-│   ├── FolderSidebar.tsx             # 左侧文件夹导航
-│   ├── UploadDialog.tsx
+│   ├── FolderSidebar.tsx             # 左侧文件夹导航；支持系统文件夹只读样式
+│   ├── UserAvatarDropdown.tsx        # 用户头像下拉：用户名 + 邮箱 / 编辑资料 / 登出
+│   ├── UploadDialog.tsx              # 多文件上传队列 + 「保存到」文件夹选择
 │   ├── UploadProgress.tsx
 │   └── EmptyState.tsx
 ├── document-detail/                  # 文档详情页组件
@@ -144,23 +148,162 @@ components/
 │   │   ├── academic/                 # 学术论文模板
 │   │   ├── compact/                  # 紧凑模板
 │   │   └── card/                     # 卡片模板
+│   ├── DocumentDetailHeader.tsx      # 顶部 sticky 居中胶囊：返回 / 面包屑 / 模板切换 / 下载 / AI 开关
 │   ├── TemplateSwitcher.tsx
 │   ├── DocumentOutline.tsx           # shadcn ScrollArea, sticky top-28, h1-h6 全层级
-│   ├── DocumentMeta.tsx              # 右侧元数据面板
-│   ├── AIChatPanel.tsx               # 仅 UI，不实现后端
+│   ├── DocumentMeta.tsx              # 右侧元数据面板：创建时间 / 文件大小 / 语言 / 字数 / 标签管理区
+│   ├── DocumentTagPicker.tsx         # 内联标签选择器：搜索 / 勾选 /「创建并添加 X」
+│   ├── AIChatPanel.tsx               # AI 问答面板容器（normal / tall / wide 尺寸切换；Skill 实现属于 noter-agent spec）
 │   ├── ChatMessage.tsx
-│   ├── MindmapViewer.tsx
+│   ├── MindmapViewer.tsx             # 基于 @xyflow/react 的左→右树形布局
 │   ├── SummaryCard.tsx
 │   └── DownloadButton.tsx            # 仅需 title prop, window.print() 方案
+
+utils/feature/search/
+└── scrollAndHighlight.ts             # buildMatchAnchor / findFirstMatchInDom / scrollAndFlash 工具函数
 
 types/
 ├── template.ts                       # TemplateConfig 接口, TemplateType 类型
 
 app/(main)/documents/
-├── page.tsx                          # 文档管理主页面（左侧文件夹导航 | 右侧主内容）
+├── page.tsx                          # 文档管理主页面（左侧文件夹导航 | 中间主内容 | 右侧标签筛选；顶部 DocumentsHeader）
 └── [id]/
-    └── page.tsx                      # 文档详情页（三栏：大纲 | 正文 | 元数据）
+    └── page.tsx                      # 文档详情页（三栏：大纲 | 正文 | 元数据 + AI 面板；顶部 DocumentDetailHeader）
+
+app/(main)/profile/
+├── page.tsx                          # 账号设置页：左侧 Tab 导航 + 右侧内容区 + 顶部「返回」
+├── ProfileSection.tsx                # 个人资料 Tab
+├── PasswordSection.tsx               # 修改密码 Tab
+└── EmailSection.tsx                  # 修改邮箱 Tab
 ```
+
+> **下线说明**：`PaginationController.tsx`（页码翻页）已被「加载更多」式分页取代；左侧旧版用户操作面板（User_Panel）相关组件已下线，账号入口统一收敛到顶部 `UserAvatarDropdown`。
+
+### 关键容器组件
+
+#### DocumentsHeader（文档列表顶部胶囊）
+
+- 位置：`/documents` 页面顶部 sticky，左右贴齐内容区。
+- 结构：左侧 `Image src="/logo.svg"` + brand `noter`；右侧依次 `SearchBar`（容器宽度 `w-72`）、上传按钮（`<Upload>` icon + 「上传文档」文案，触发 `onUpload` 回调）、`UserAvatarDropdown`。
+- 与详情页的 `DocumentDetailHeader` 风格一致（同样的 sticky / 半透明 / 胶囊语言），共同构成「上下两段统一头」。
+
+#### DocumentDetailHeader（文档详情页顶部胶囊）
+
+- 位置：详情页正文之上，`sticky top-3 z-30`，使用 `bg-background/80 backdrop-blur-md` 半透明 + 模糊；高度固定 `h-12`，宽度 `max-w-5xl` 居中。
+- 结构（左→右）：
+  1. 圆形返回按钮：点击后 `router.push('/documents')`。
+  2. 面包屑 `<nav aria-label="面包屑">`：`用户名 → folderTrail[0] → … → folderTrail[n] → 文档标题`。
+     - 用户名锚点：`<Link href='/documents'>`，`max-w-[140px] truncate`，缺省取 `user.email` 前缀。
+     - 文件夹链：从当前 `document.folderId` 沿 `parentId` 向上回溯，最多 16 层防循环（实现见 `buildFolderTrail`）；每层 `<Link href={'/documents?folderId=' + id}>`，`max-w-[160px] truncate`。
+     - 文档标题：剩余宽度内 `truncate`，`title={document.title}` 提供 hover tooltip。
+  3. 右侧操作组：`TemplateSwitcher` / `DownloadButton iconOnly` / AI 问答 toggle。
+     - AI toggle 使用 `<Button variant={panelVisible ? 'default' : 'ghost'} aria-pressed={panelVisible}>`，与 `AIChatPanel.visible` 双向绑定。
+
+#### UserAvatarDropdown（用户头像下拉）
+
+- 触发器：`<Avatar size-9>`，`AvatarImage src={user.avatarUrl}`；缺省渲染 `AvatarFallback` 取 `(user.username ?? user.email)[0]` 大写。
+- 下拉内容：
+  - `DropdownMenuLabel`：双行展示 `user.username` 与 `user.email`，均 `truncate`。
+  - `DropdownMenuItem` 「编辑资料」→ `router.push('/profile')`。
+  - `DropdownMenuItem` 「登出」→ `userApi.signout()` → `clearUser()` → `router.push('/signin')`；`signout` 异常时仍执行 `clearUser` + 跳转，避免用户停在受保护页面。
+- 不再提供「注销账号」入口（账号注销能力当前不在本 spec 范围）。
+
+#### DocumentCard 与 DocumentCardMenu（电影海报式文档卡片）
+
+- `DocumentCard` 容器使用 `<Link href={'/documents/' + id}>` 包裹整张卡片，`Card` 上加 `aspect-[2/3] max-w-[160px] overflow-hidden`。
+- 背景：绝对定位的 `<div style={{ backgroundImage: 'url(' + cover + ')' }} bg-cover bg-center>`；`cover = document.coverUrl ?? pickDefaultCover(document.id)`。
+  - 默认封面 5 张，资源放在 `apps/noter-web/public/covers/{blue,green,pink,puper,yellow}.svg`。
+  - `pickDefaultCover(id)` 简单哈希：按字符 ASCII 累加（`hash = (hash * 31 + code) | 0`）后 `Math.abs(hash) % 5` 选取，保证同文档每次刷新拿到同一张默认封面。
+- 底部毛玻璃面板：`backdrop-blur-md backdrop-saturate-150` + 顶部 `mask-image: linear-gradient(to top, black 70%, transparent 100%)` 实现羽化过渡，叠加显示：
+  - 文档标题：`truncate(title, 50)`，`line-clamp-2`。
+  - 标签：最多展示前 3 个 chip（`Badge variant='secondary'`），超出部分以 `+N` 文本提示。
+- `DocumentCardMenu` 渲染在卡片左上角 `absolute top-1.5 left-1.5 z-10`，使用 `DropdownMenu`：
+  - 「更换背景图」：触发隐藏 `<input type="file" accept="image/jpeg,image/png,image/webp,image/gif">`；客户端先校验 `type ∈ ALLOWED_TYPES` 与 `size ≤ 5MB`，调用 `documentApi.uploadCover(documentId, file)` 上传，`useDocumentStore.uploadCover` 同步更新本地 `coverUrl`。
+  - 「恢复默认封面」：仅在 `hasCustomCover === true` 时渲染，调用 `documentApi.resetCover(documentId)`，删除 storage 中已存在的旧文件并把 `coverUrl` 置空。
+  - 「删除文档」：弹 `AlertDialog` 二次确认；确认后由 `useDocumentStore.deleteDocument` 乐观更新（先从列表移除并将 `total - 1`），调用 `documentApi.delete` 失败则回滚。
+
+#### FolderSidebar 与系统文件夹只读语义
+
+- `GET /api/folders` 一次性返回用户私有文件夹与系统文件夹（`isSystemFolder=true`）；前端按返回顺序渲染（系统文件夹由后端置顶）。
+- 系统文件夹禁止重命名 / 删除（前端不显示对应菜单项），上传 Dialog 在文件夹下拉中过滤掉系统文件夹。
+- `documentCount` 由后端按文件夹来源分别统计：用户私有文件夹按 `user_id=auth.uid()` 统计，系统文件夹按 `document_scope='public'` 统计。
+
+#### LoadMoreController（「加载更多」分页）
+
+- 位置：文档卡片网格底部。当 `hasMore === true` 时渲染按钮 + `X / Y documents` 计数；`hasMore === false` 且至少加载过一页时渲染「已经到底啦」终态文案。
+- 行为：
+  - 点击「加载更多」→ `useDocumentStore.loadMore()`：把 `page + 1` 的请求结果 append 到 `documents` 末尾，并按 `page * pageSize >= total` 维护 `hasMore`。
+  - `fetchDocuments()`（含 reset / 排序变化 / 筛选变化 / 标签变化）始终重置 `page=1` 并重置 `documents`。
+  - `loadingMore` 控制按钮 spinner 与禁用态，避免重复点击。
+- pageSize 默认 10，本期不暴露每页条数选择控件。
+
+#### SearchBar（混合搜索体验）
+
+- 输入约束：`maxLength=200`；输入 300ms 防抖触发 `searchApi.search`；超时 10s 由 axios 配置控制。
+- 结果下拉：最多 50 条，按 `score` 降序兜底排序；每条结果包含：
+  - `<FileText>` 图标 + 文档标题（truncate）；
+  - 命中类型 chip：`keyword`（蓝, `<Type>` icon）/ `vector`（紫, `<Sparkles>` icon）/ `hybrid`（绿, `<Layers>` icon）；
+  - 命中片段（`HighlightedSnippet`）：服务端关键词命中保留 `<mark>` 直接渲染，向量命中走客户端 token 高亮兜底；统一 `stripMarkdown` 后再截断（`SNIPPET_MAX_LENGTH = 220`），避免下拉被超长正文撑开。
+- 错误态：超时 / 服务端失败时下拉展示「重试」按钮，重新调用 `searchApi.search`。
+- 点击命中结果：`router.push('/documents/{id}?match={anchor}&q={query}')`，`anchor = buildMatchAnchor(rawSnippet)`（首个 `<mark>` 内文本剥离 markdown 后取前 60 字符）。
+
+#### 文档详情页的 match / q 处理
+
+- 详情页 `useEffect` 监听 `searchParams.match` 与 `searchParams.q`：
+  - `mainRef` 指向正文容器；待 `loading=false` 后用 `findFirstMatchInDom(mainRef.current, phrase)` 在 DOM 中查找首个匹配文本（按候选顺序：`match` → `q`）。
+  - 命中节点调用 `scrollAndFlash(target, 120)`：平滑滚动到 `top - 120px`，对目标元素做两次黄色背景闪烁（`rgba(250, 204, 21, 0.45)` + 阴影），完成后还原内联样式。
+  - 处理完成后 `router.replace` 清除 `match` / `q` query，避免返回 / 刷新时重复触发。
+- 工具函数集中在 `apps/noter-web/utils/feature/search/scrollAndHighlight.ts`：
+  - `findFirstMatchInDom(root: HTMLElement, phrase: string): HTMLElement | null`：用 `TreeWalker` 把文本节点拼成扁平字符串后 `indexOf`，跨多个 inline 节点的命中也能落到最近块级容器。
+  - `scrollAndFlash(target: HTMLElement, offsetPx?: number): void`：保存 / 恢复 `backgroundColor` / `boxShadow` / `transition` / `borderRadius` 内联样式，闪烁两次（apply→clear→apply→clear→restore）。
+  - `buildMatchAnchor(rawSnippet: string): string`：优先取首个 `<mark>` 内文本，剥离 markdown 与 HTML 标签后取前 60 字符。
+
+#### DocumentMeta 与 DocumentTagPicker（文档详情页内联标签管理）
+
+- `DocumentMeta` 在右侧元数据面板渲染：创建时间 / 文件大小 / 语言 / 字数 + 标签管理区。
+- 标签管理区：
+  - 已挂载标签：每个 `Badge` 自带 X 按钮，点击调用 `useDocumentDetailStore.removeTagFromDocument(tagId)`；store 内做乐观更新 + 回滚。
+  - 「添加标签」入口 `DocumentTagPicker`：`Popover` + `Input`（`maxLength=20`）+ `ScrollArea`：
+    - 列表展示 `useTagStore.tags`，已挂载标签置为 `disabled` + `<Check>` 标记。
+    - 输入框关键词大小写不敏感过滤；`trimmed.length ∈ [1, 20]` 且不与现有标签同名时，列表底部展示「创建并添加 X」选项。
+    - 选择已有标签 → `addTagToDocument(tag)` 乐观追加并调 `POST /api/documents/[id]/tags`；失败回滚。
+    - 「创建并添加 X」→ 先 `useTagStore.createTag(trimmed)`（自动刷新全局 tags），再从最新 tags 中找到新建标签调 `addTagToDocument`。
+
+#### UploadDialog（多文件上传与文件夹选择）
+
+- 队列模型：组件内部维护 `QueueItem[]`，按 `${file.name}__${file.size}` 去重；校验失败的文件汇总到一条 `validationError`，校验通过的进入待上传队列。
+- 单文件场景：仍走原有 `documentApi.upload` + `UploadProgress`（轮询 `parseStatus / summaryStatus / mindmapStatus` 并展示阶段化进度），上传成功后立即 `onUploadComplete()` 触发列表 `reset()`。
+- 多文件场景：顺序逐个调用 `documentApi.upload`；UI 以「正在上传 X / N」紧凑总进度条 + 当前文件名展示；全部完成后展示成功 / 失败汇总；只要至少有一个成功就触发一次 `onUploadComplete()`。
+- 上传过程中（无论单 / 多文件）禁止关闭 Dialog，避免请求被打断。
+- 「保存到」：`Select` 列出 `useFolderStore.folders` 中**用户私有**文件夹（系统文件夹被过滤）；未选择时 `folder_id=null`，文档落到「全部文档」。
+- 文件类型 / 大小校验复用 `utils/feature/documents/schemas.ts` 中的 `ALLOWED_EXTENSIONS` 与 `MAX_FILE_SIZE`（PDF / DOCX / PPTX / TXT / MD，≤ 50MB）。
+
+#### AIChatPanel 容器（仅描述文档详情页中的容器与布局影响）
+
+- 本 spec 不展开 Skill / SSE 协议 / 结构化卡片 / `agent_skill_sessions` 表设计——这部分由 `noter-agent` spec 维护。
+- 在文档详情页中，`AIChatPanel` 只承担**容器**职责：
+  - 头部按钮：「向上拉长」（切 `tall`）/「两栏布局」（切 `wide`）/「关闭」；切换时不重置消息流（消息流由 `noter-agent` 的 `chatSessionStore` 维护）。
+  - `panelSize ∈ {'normal', 'tall', 'wide'}`，`panelVisible: boolean`，由 `useDocumentDetailStore` 维护。
+  - 关闭按钮触发 `togglePanel()`，store 内会强制把 `panelSize` 还原为 `normal`，避免下次打开仍停留在 tall / wide。
+  - 详情页布局派生量：
+    - `showOutline = !(panelVisible && panelSize === 'wide')`
+    - `showMeta = panelVisible ? panelSize === 'normal' : true`
+    - 右侧栏宽度：未开 AI = `w-72` (288px)；`normal` / `tall` = `w-[420px]`；`wide` = `w-[640px]`。
+
+#### MindmapViewer（基于 React Flow 的思维导图）
+
+- 库：`@xyflow/react`（>=12），样式入口 `import '@xyflow/react/dist/style.css'`。
+- 数据源：`document_mindmaps.mindmap_json` 仍为 `MindmapNode` 树（`{ id, label, children }`）；前端用 `convertToFlowElements(root)` 递归算出 React Flow 的 `Node[]` 与 `Edge[]`。
+- 布局参数：
+  - `NODE_WIDTH = 180`、`NODE_HEIGHT = 40`、`HORIZONTAL_GAP = 60`、`VERTICAL_GAP = 30`；
+  - 第一遍遍历计算每个子树的高度（`getSubtreeHeight`），第二遍按子树高度居中布局（左→右）；
+  - 边类型 `smoothstep`，边 id 为 `${node.id}-${child.id}`。
+- React Flow 配置：`fitView`、`fitViewOptions={{ padding: 0.2 }}`、`minZoom={0.3}`、`maxZoom={2}`、`proOptions={{ hideAttribution: true }}`，搭配 `<Background />` + `<Controls />`。
+- 状态机（与 `mindmapStatus` 联动）：
+  - `pending / running` 且无数据 → 加载占位（`<Loader2>` + 「AI 正在生成思维导图」）。
+  - 终态（`success` / `failed`）且无数据 → 「暂无思维导图」+「生成思维导图」按钮。
+  - 有数据 → 渲染思维导图 + 头部「重新生成」按钮（`running` 时禁用并显示 spinner）。
+- `SummaryCard` 使用同一套 `summaryStatus` 状态机渲染加载占位 / 空态 /「重新生成」按钮。
 
 ### API 模块接口
 
@@ -174,6 +317,10 @@ export const documentApi = {
   getById: (id: string) => http.get<Document>(`api/documents/${id}`),
   delete: (id: string) => http.delete<void>(`api/documents/${id}`),
   getStatus: (id: string) => http.get<DocumentStatus>(`api/documents/${id}/status`),
+  /** 上传 / 更换文档封面，返回 `{ coverUrl }`（带 `?t=Date.now()` 时间戳便于浏览器刷新缓存） */
+  uploadCover: (id: string, file: File) => http.post<{ coverUrl: string }>(`api/documents/${id}/cover`, formData),
+  /** 删除自定义封面，恢复默认 */
+  resetCover: (id: string) => http.delete<void>(`api/documents/${id}/cover`),
 }
 
 // lib/axios/folders.ts - 新增模块
@@ -190,19 +337,20 @@ export const tagApi = {
   create: (data: CreateTagInput) => http.post<Tag>('api/tags', data),
   delete: (id: string) => http.delete<void>(`api/tags/${id}`),
   addToDocument: (documentId: string, tagId: string) => http.post<void>(`api/documents/${documentId}/tags`, { tagId }),
-  removeFromDocument: (documentId: string, tagId: string) => http.delete<void>(`api/documents/${documentId}/tags/${tagId}`),
+  /** 移除文档标签；服务端在该标签已无任何文档使用时会级联软删除 tag 实体并返回 `tagDeleted: true` */
+  removeFromDocument: (documentId: string, tagId: string) => http.delete<{ tagDeleted: boolean }>(`api/documents/${documentId}/tags/${tagId}`),
 }
 
 // lib/axios/search.ts - 扩展现有模块
 export const searchApi = {
-  search: (params: SearchParams) => http.get<SearchResult[]>('api/search', { ...params }),
+  search: (params: SearchParams) => http.get<SearchResult[]>('api/search', { ...params }, { timeout: 10_000 }),
 }
 
 // lib/axios/ai.ts - 扩展现有模块
 export const aiApi = {
-  regenerateSummary: (documentId: string) => http.post<Summary>('api/ai/regenerate-summary', { documentId }),
-  regenerateMindmap: (documentId: string) => http.post<MindmapData>('api/ai/regenerate-mindmap', { documentId }),
-  // chat 相关接口后续迭代补充
+  regenerateSummary: (documentId: string) => http.post<{ success: boolean; message?: string }>('api/ai/regenerate-summary', { documentId }),
+  regenerateMindmap: (documentId: string) => http.post<{ success: boolean; message?: string }>('api/ai/regenerate-mindmap', { documentId }),
+  // chat / sessions 相关接口属于 noter-agent spec 范围
 }
 ```
 
@@ -210,54 +358,76 @@ export const aiApi = {
 
 | 方法 | 路径 | 描述 | Zod Schema |
 |------|------|------|------------|
-| GET | `/api/documents` | 文档列表（分页+标签筛选+文件夹筛选） | `listDocumentsSchema` |
-| POST | `/api/documents/upload` | 上传文档（FormData 含 folderId 字段） | FormData 校验 |
-| GET | `/api/documents/[id]` | 文档详情 | `documentIdSchema` |
-| DELETE | `/api/documents/[id]` | 删除文档 | `documentIdSchema` |
-| GET | `/api/documents/[id]/status` | 查询解析状态 | `documentIdSchema` |
+| GET | `/api/documents` | 文档列表（分页 + 标签筛选 + 文件夹筛选 + 状态/收藏/扩展名/创建时间筛选 + 多字段排序）。`public_documents_visible=true` 时合并查询 `user_id=auth.uid() OR document_scope='public'`，`false` 时退化为仅查询 `user_id=auth.uid()` | `listDocumentsSchema` |
+| POST | `/api/documents/upload` | 上传文档（FormData：`file` 必填、`folderId` 可选）。`allow_user_upload=false` 时直接返回 403 | `uploadDocumentSchema` |
+| GET | `/api/documents/[id]` | 文档详情：合并私有 ∪ 公共文档（同 list 规则）。响应额外携带 `documentScope: 'private' \| 'public'`，便于前端按只读语义渲染公共文档 | `documentIdSchema` |
+| DELETE | `/api/documents/[id]` | 软删除文档。`allow_user_delete_own=false` 时返回 403；`document_scope='public'` 由 RLS 拒绝 | `documentIdSchema` |
+| GET | `/api/documents/[id]/status` | 查询解析与 AI 状态：返回 `{ status, parseStatus, vectorStatus, summaryStatus, mindmapStatus }` | `documentIdSchema` |
+| POST | `/api/documents/[id]/cover` | 上传 / 更换文档封面（FormData `file`，校验 `type ∈ {jpeg,png,webp,gif}` 且 `size ≤ 5MB`），写入 `userResources/{userId}/{documentId}.{ext}`（upsert: true），返回 `{ coverUrl }`（URL 末尾附 `?t=Date.now()`） | `documentIdSchema` |
+| DELETE | `/api/documents/[id]/cover` | 清空 `documents.cover_url` 并尝试从 storage 删除旧文件（容错忽略失败） | `documentIdSchema` |
 | POST | `/api/documents/[id]/tags` | 为文档添加标签 | `addTagSchema` |
-| DELETE | `/api/documents/[id]/tags/[tagId]` | 移除文档标签 | params 校验 |
-| GET | `/api/folders` | 获取用户文件夹列表 | 无 body |
-| POST | `/api/folders` | 创建文件夹 | `createFolderSchema` |
-| PATCH | `/api/folders/[id]` | 更新文件夹（重命名等） | `updateFolderSchema` |
-| DELETE | `/api/folders/[id]` | 删除文件夹 | `folderIdSchema` |
+| DELETE | `/api/documents/[id]/tags/[tagId]` | 解除文档与标签的关联（`document_tags` 真删除）；若该标签解除后已无任何文档引用则级联软删除 `tags.deleted=1`，响应中带 `tagDeleted: boolean` | params 校验 |
+| GET | `/api/folders` | 合并返回 `user_id=auth.uid() OR is_system_folder=true`；系统文件夹置顶；私有文件夹按用户私有文档计数 `documentCount`，系统文件夹按 `document_scope='public'` 计数；响应中带 `isSystemFolder: boolean` | 无 body |
+| POST | `/api/folders` | 创建文件夹（仅创建用户私有文件夹） | `createFolderSchema` |
+| PATCH | `/api/folders/[id]` | 更新文件夹（重命名 / 移动）。业务层先 query `is_system_folder`，命中时显式返回 403「系统文件夹不可修改」，RLS 作为兜底 | `updateFolderSchema` |
+| DELETE | `/api/folders/[id]` | 删除文件夹。同 PATCH 显式拒绝系统文件夹；删除后将该文件夹下所有文档的 `folder_id` 置为 null | `folderIdSchema` |
 | GET | `/api/tags` | 获取用户标签列表 | 无 body |
 | POST | `/api/tags` | 创建标签 | `createTagSchema` |
 | DELETE | `/api/tags/[id]` | 删除标签 | `tagIdSchema` |
-| GET | `/api/search` | 混合搜索 | `searchSchema` |
-| POST | `/api/ai/chat/stream` | AI 问答（流式） | 后续迭代 |
-| GET | `/api/ai/history` | 获取对话历史 | 后续迭代 |
-| POST | `/api/ai/regenerate-summary` | 重新生成总结 | `regenerateSchema` |
-| POST | `/api/ai/regenerate-mindmap` | 重新生成思维导图 | `regenerateSchema` |
+| GET | `/api/search` | 混合搜索（向量 + 关键词），最多返回 50 条，含 `<mark>` 高亮的 `matchedContent` | `searchSchema` |
+| POST | `/api/ai/regenerate-summary` | 触发 generate-summary Edge Function 重新生成总结，独立于上传链路 | `regenerateSchema` |
+| POST | `/api/ai/regenerate-mindmap` | 触发 generate-mindmap Edge Function 重新生成思维导图，独立于上传链路 | `regenerateSchema` |
+
+> AI 对话 / Skill 相关端点（`/api/ai/chat/stream`、`/api/ai/sessions/*`、SSE 协议、agent_skill_sessions 表读写等）由 `noter-agent` spec 单独定义，不在本表范围内。
 
 ### Zustand Store 设计
 
 ```typescript
-// stores/document.ts
+// stores/document.ts —— 文档列表 store
+interface DocumentFilters {
+  status: 'ready' | 'processing' | 'failed' | null
+  favoriteOnly: boolean
+  fileExts: string[]                   // 'pdf' | 'docx' | 'pptx' | 'txt' | 'md'
+  createdWithinDays: number | null     // 7 / 30 / 90，null = 不限
+}
+
 interface DocumentState {
   documents: Document[]
   total: number
   page: number
-  pageSize: number
+  pageSize: number                     // 默认 10
   loading: boolean
+  loadingMore: boolean
   error: string | null
   selectedTags: string[]
-  selectedFolderId: string | null
-  setPage: (page: number) => void
-  setPageSize: (size: number) => void
+  hasMore: boolean
+  // 排序
+  orderBy: 'created_at' | 'updated_at' | 'title' | 'file_size' | 'word_count'
+  order: 'asc' | 'desc'
+  // 筛选
+  filters: DocumentFilters
   setSelectedTags: (tags: string[]) => void
-  setSelectedFolderId: (folderId: string | null) => void
-  fetchDocuments: () => Promise<void>
+  setSort: (orderBy: SortField, order: SortOrder) => void
+  setFilters: (patch: Partial<DocumentFilters>) => void
+  resetFilters: () => void
+  fetchDocuments: () => Promise<void>  // 重置 documents 列表 + 拉取第 1 页
+  loadMore: () => Promise<void>        // 把下一页结果 append 到 documents 末尾
+  reset: () => void                    // 设置 page=1 + 清空列表 + 触发 fetchDocuments
+  deleteDocument: (id: string) => Promise<void>  // 乐观更新 + 失败回滚
+  uploadCover: (id: string, file: File) => Promise<void>
+  resetCover: (id: string) => Promise<void>
 }
 
 // stores/folders.ts
 interface FolderState {
-  folders: Folder[]
+  folders: Folder[]                    // 包含用户私有文件夹与系统文件夹（isSystemFolder=true）
+  selectedFolderId: string | null      // null = 全部文档
   loading: boolean
   fetchFolders: () => Promise<void>
   createFolder: (name: string, parentId?: string) => Promise<void>
-  updateFolder: (id: string, data: UpdateFolderInput) => Promise<void>
+  renameFolder: (id: string, name: string) => Promise<void>
   deleteFolder: (id: string) => Promise<void>
+  setSelectedFolder: (id: string | null) => void
 }
 
 // stores/tags.ts
@@ -269,22 +439,38 @@ interface TagState {
   deleteTag: (id: string) => Promise<void>
 }
 
-// stores/documentDetail.ts
+// stores/documentDetail.ts —— 文档详情页 store
+type AIPanelSize = 'normal' | 'tall' | 'wide'
+
 interface DocumentDetailState {
   document: Document | null
   loading: boolean
   error: string | null
   template: TemplateType
-  panelVisible: boolean          // AI 面板展开/收起状态（仅 UI）
-  summaryStatus: ProcessingStatus | null  // 重新生成时的状态轮询
-  mindmapStatus: ProcessingStatus | null  // 重新生成时的状态轮询
+  panelVisible: boolean                // AI 面板显隐（容器层）
+  panelSize: AIPanelSize               // AI 面板尺寸；togglePanel() 关闭时强制回到 normal
+  summaryStatus: ProcessingStatus | null
+  mindmapStatus: ProcessingStatus | null
+  pollingTimer: ReturnType<typeof setInterval> | null
   setTemplate: (template: TemplateType) => void
-  fetchDocument: (id: string) => Promise<void>
   togglePanel: () => void
-  regenerateSummary: () => Promise<void>   // 触发后轮询 status 直到 success/failed
-  regenerateMindmap: () => Promise<void>   // 触发后轮询 status 直到 success/failed
+  setPanelSize: (size: AIPanelSize) => void
+  fetchDocument: (id: string) => Promise<void>      // 拉取详情后，按需启动状态轮询
+  stopPolling: () => void                            // 离开页面或终态时清理 timer
+  regenerateSummary: () => Promise<void>             // 触发 + 轮询直到 success / failed / 超时
+  regenerateMindmap: () => Promise<void>             // 触发 + 轮询直到 success / failed / 超时
+  addTagToDocument: (tag: Tag) => Promise<void>      // 乐观追加 + 失败回滚 + 同步 useTagStore.fetchTags
+  removeTagFromDocument: (tagId: string) => Promise<void> // 乐观移除 + tagDeleted=true 时同步刷新筛选面板并从 selectedTags 中剔除
 }
 ```
+
+**轮询机制约束（与需求 19 / 20 对齐）**：
+
+- 轮询间隔 `POLL_INTERVAL = 3_000` ms。
+- 单次轮询最多 `MAX_POLL_ATTEMPTS = 100` 次（约 5 分钟）；超过上限把仍在进行中（`pending` / `running`）的状态强制标记为 `failed` 并停止轮询。
+- 单次 `getStatus` 调用失败不停止轮询（下次再试）；累计超过上限才兜底失败。
+- 当 `summaryStatus` 或 `mindmapStatus` 由进行中转为 `success` 时，立即重新 `GET /api/documents/[id]` 拉取详情刷新 `SummaryCard` / `MindmapViewer`。
+- `fetchDocument` 在切换文档时先调用 `stopPolling` 清掉旧 timer；详情页 `useEffect` 卸载时也调用 `stopPolling` 避免后台空转。
 
 ---
 
@@ -344,6 +530,8 @@ interface DocumentDetailState {
 | language | text | 文档语言 |
 | is_favorite | int (0/1) | 是否收藏 |
 | is_archived | int (0/1) | 是否归档 |
+| cover_url | text (nullable) | 文档封面图 URL，存储在 `userResources/{user_id}/{document_id}.{ext}`；为 null 时由前端基于文档 ID 哈希在 5 张内置默认封面中稳定选取 |
+| document_scope | text (default 'private') | 文档范围：'private'（私有）/ 'public'（公共，由系统账号持有，全体登录用户只读可见） |
 | deleted | int (0/1) | 软删除 |
 | deleted_at | timestamptz | 删除时间 |
 | created_at / updated_at | timestamptz | 时间戳 |
@@ -358,6 +546,7 @@ interface DocumentDetailState {
 | parent_id | UUID (nullable, FK→folders) | 父文件夹ID，null 表示顶层 |
 | icon | text | 文件夹图标 |
 | sort_order | int | 排序序号 |
+| is_system_folder | boolean (default false) | 系统文件夹标记。`true` 时由 noter-admin 平台维护、挂在系统账号下，对所有 authenticated 用户只读可见且置顶；普通用户业务接口与 RLS 双重拒绝 UPDATE / DELETE |
 | deleted | int (0/1) | 软删除 |
 | created_at / updated_at | timestamptz | 时间戳 |
 
@@ -523,6 +712,7 @@ erDiagram
 > - AI 总结和思维导图独立成表（document_summaries / document_mindmaps），与文档主表解耦
 > - 文档内容（Markdown）独立存储在 document_contents 表，避免文档主表过大
 > - document_processing_jobs 记录每个 Edge Function 的执行状态，便于重试和监控
+> - **公共文档（`documents.document_scope='public'`）与系统文件夹（`folders.is_system_folder=true`）由 noter-admin 平台维护**：noter-web 仅以只读语义对外展示；UPDATE / DELETE 路径在业务层先 query 标记字段命中时直接返回 403，RLS 仅放开 SELECT 给 authenticated 全员作为兜底。
 
 ### RLS 策略
 
@@ -532,8 +722,10 @@ erDiagram
 |----|------|------|
 | profiles | SELECT/UPDATE | `auth.uid() = id` |
 | user_settings | SELECT/INSERT/UPDATE | `auth.uid() = user_id` |
-| documents | SELECT/INSERT/UPDATE/DELETE | `auth.uid() = user_id` |
-| folders | SELECT/INSERT/UPDATE/DELETE | `auth.uid() = user_id` |
+| documents | SELECT | `auth.uid() = user_id OR document_scope = 'public'`（公共文档对全体登录用户只读可见） |
+| documents | INSERT/UPDATE/DELETE | `auth.uid() = user_id`（公共文档仅由系统账号 / noter-admin 维护） |
+| folders | SELECT | `auth.uid() = user_id OR is_system_folder = true`（系统文件夹对全体登录用户只读可见） |
+| folders | INSERT/UPDATE/DELETE | `auth.uid() = user_id AND is_system_folder = false`（系统文件夹由 noter-admin 维护） |
 | document_contents | SELECT/INSERT/UPDATE | `auth.uid() = user_id` |
 | document_assets | SELECT/INSERT | `auth.uid() = user_id` |
 | tags | SELECT/INSERT/UPDATE/DELETE | `auth.uid() = user_id` |
@@ -543,14 +735,20 @@ erDiagram
 | document_mindmaps | SELECT/INSERT/UPDATE | `auth.uid() = user_id` |
 | document_qa_records | SELECT/INSERT | `auth.uid() = user_id` |
 | document_processing_jobs | SELECT/INSERT/UPDATE | `auth.uid() = user_id` |
+| system_settings | SELECT | `authenticated`（全体登录用户可读，写入仅限 admin / service_role） |
 
-> **RLS 设计原则**：RLS 主要负责用户数据隔离。`deleted=0` 的过滤在业务查询和 RPC 中处理，不在 RLS 策略中加入，避免影响后续恢复、清理和后台维护逻辑。
+> **应用层与 RLS 协同**：
+> - `system_settings.public_documents_visible=false` 时，本 spec 在 Route Handler `GET /api/documents` / `GET /api/documents/[id]` 查询条件中**不再** OR 上 `document_scope='public'`，仅查 `user_id=auth.uid()`，即使 RLS 仍允许读取公共文档，应用层也不会拼出公共文档结果。该开关本质上是「应用层是否合并查询公共文档」。
+> - `system_settings.allow_user_upload=false` / `allow_user_delete_own=false` 时由 Route Handler 入口直接返回 403；RLS 不再做二次门控。
+> - 系统文件夹的 SELECT 由 RLS 放开给所有 authenticated 用户，但 UPDATE / DELETE 在 noter-web Route Handler `PATCH/DELETE /api/folders/[id]` 中先显式 query `is_system_folder` 命中时直接返回 403「系统文件夹不可修改 / 不可删除」，RLS 作为兜底再拒一次。
+
+> **RLS 设计原则**：RLS 主要负责用户数据隔离 + 公共内容只读放开。`deleted=0` 的过滤在业务查询和 RPC 中处理，不在 RLS 策略中加入，避免影响后续恢复、清理和后台维护逻辑。
 
 **Storage Policy：**
 
 | Bucket | 读取 | 写入 |
 |--------|------|------|
-| `userResources` | 用户仅能读取自身路径 | 用户仅能写入自身路径 |
+| `userResources` | 全员可读（用于头像 / 文档封面跨用户展示） | 用户仅能写入自身 `auth.uid() = user_id` 目录 |
 | `document-originals` | 用户仅能读取自身 user_id 目录 | 用户仅能写入自身 user_id 目录 |
 | `document-assets-public` | 公开读取（无需鉴权） | 仅 Edge Function（service_role）可写入 |
 
@@ -558,15 +756,16 @@ erDiagram
 
 | Bucket | 访问级别 | 路径格式 | 用途 |
 |--------|----------|----------|------|
-| `userResources` | 私有 | `{user_id}/avatar/{filename}` | 用户头像 |
+| `userResources` | 公开读取 / 用户自身写入 | `{user_id}/avatar/{filename}`、`{user_id}/{document_id}.{ext}` | 用户头像与文档封面（封面文件名直接使用 `{document_id}.{ext}`，便于 upsert 覆盖） |
 | `document-originals` | 私有 | `{user_id}/{document_id}` | 原始上传文件（PDF/DOCX/PPTX/TXT/MD），不含文件名以避免中文路径问题 |
 | `document-assets-public` | 公开 | `{user_id}/{document_id}/{image_filename}` | 文档解析产生的图片资源 |
 
 **设计说明：**
 
 - **原始文件与图片资源分离**：原始文档存放于 `document-originals` 私有桶，受 RLS 和 Storage Policy 控制；解析产生的图片存放于 `document-assets-public` 公开桶，前端渲染 Markdown 时可直接通过公网 URL 访问图片，无需额外鉴权
+- **`userResources` 桶承载用户头像与文档封面**：封面采用 `{user_id}/{document_id}.{ext}` 扁平路径，`POST /api/documents/[id]/cover` 使用 `upsert: true` 直接覆盖旧文件；`DELETE` 则尝试清理旧文件后再把 `documents.cover_url` 置空。封面 URL 末尾附 `?t=Date.now()` 时间戳，便于浏览器在替换封面后立即刷新缓存
 - **权限控制重点**：系统的数据权限控制作用于原始文件、文档记录、Markdown 正文、标签、向量片段和 AI 结果；公开桶中的图片仅作为 Markdown 渲染的静态资源，不包含敏感信息
-- **Storage Policy**：`document-originals` 桶设置 RLS 策略确保用户仅能读写自身 user_id 目录下的文件；`document-assets-public` 桶允许公开读取，写入仅限 Edge Function（service_role）
+- **Storage Policy**：`document-originals` 桶设置 RLS 策略确保用户仅能读写自身 `user_id` 目录下的文件；`document-assets-public` 桶允许公开读取，写入仅限 Edge Function（service_role）；`userResources` 桶允许全员读取（用于跨用户展示头像 / 封面），写入仅限 `auth.uid() = user_id` 的目录
 
 ### TypeScript 类型定义
 
@@ -597,6 +796,10 @@ export interface Document {
   language: string | null
   isFavorite: number
   isArchived: number
+  /** 文档封面图 URL；为 null 时由前端基于文档 ID 哈希在 5 张内置默认封面中稳定选取 */
+  coverUrl: string | null
+  /** 文档范围；GET /api/documents/[id] 详情接口额外返回此字段，便于前端按只读语义渲染公共文档 */
+  documentScope?: 'private' | 'public'
   deleted: number
   tags: Tag[]
   createdAt: string
@@ -687,7 +890,14 @@ export interface ListParams {
   tagIds?: string[]
   isFavorite?: number
   isArchived?: number
-  orderBy?: 'created_at' | 'title' | 'file_size'
+  /** 整体状态筛选：ready / processing / failed */
+  status?: 'ready' | 'processing' | 'failed'
+  /** 文件扩展名筛选（多选 OR）：pdf / docx / pptx / txt / md */
+  fileExts?: string[]
+  /** 创建时间范围（ISO 字符串） */
+  createdFrom?: string
+  createdTo?: string
+  orderBy?: 'created_at' | 'updated_at' | 'title' | 'file_size' | 'word_count'
   order?: 'asc' | 'desc'
 }
 
@@ -738,6 +948,13 @@ export interface Folder {
   deleted: number
   createdAt: string
   updatedAt: string
+  documentCount?: number
+  /**
+   * 标记是否为系统文件夹。
+   * `true` 时由 noter-admin 维护，前端展示为只读、不允许重命名 / 删除 / 移动 / 在其下新建子文件夹或上传文档。
+   * 由 GET /api/folders 返回，用于驱动 FolderSidebar 的只读样式与上传 Dialog 的可选项过滤。
+   */
+  isSystemFolder?: boolean
 }
 
 export interface CreateFolderInput {
@@ -815,6 +1032,85 @@ const response = await fetch('https://token-plan-sgp.xiaomimimo.com/v1/chat/comp
   }),
 })
 ```
+
+---
+
+## 系统级访问开关 (System_Settings_Gate)
+
+`system_settings` 表由 noter-admin 平台维护（key: text, value: jsonb，本 spec 仅需关心 boolean 形态）。本 spec 关心的开关共四类：
+
+| Key | 默认值 | 作用域 |
+|-----|--------|--------|
+| `allow_user_upload` | `true` | `POST /api/documents/upload` 入口；`false` 时直接 403「当前不允许上传文档」 |
+| `allow_user_delete_own` | `true` | `DELETE /api/documents/[id]` 入口；`false` 时直接 403「当前不允许删除文档」 |
+| `public_documents_visible` | `true` | `GET /api/documents` 与 `GET /api/documents/[id]` 是否合并查询 `document_scope='public'` 的公共文档 |
+| `audit_log_enabled` | `true` | 审计日志开关；本 spec 仅列出名称，**不**实现日志写入逻辑（由 noter-admin 维护） |
+
+### 读取入口
+
+```typescript
+// apps/noter-web/lib/settings/readSetting.ts
+export type SettingKey = 'allow_user_upload' | 'allow_user_delete_own' | 'public_documents_visible' | 'audit_log_enabled'
+
+/**
+ * 读取系统级开关。
+ * - 30s 进程内缓存，避免每次请求都打 DB；
+ * - 任意读取失败回退默认值 true，保证门控代码不会把整条 API 拖垮；
+ * - 仅可在 server 端（Route Handler / Server Component / Server Action）调用。
+ */
+export async function readSetting(key: SettingKey): Promise<boolean>
+```
+
+### 调用链
+
+```mermaid
+sequenceDiagram
+    participant FE as 前端
+    participant RH as Route Handler
+    participant Cache as readSetting (30s 进程缓存)
+    participant DB as system_settings
+
+    FE->>RH: POST /api/documents/upload
+    RH->>Cache: readSetting('allow_user_upload')
+    alt 缓存命中（< 30s）
+        Cache-->>RH: cached value
+    else 缓存过期或未命中
+        Cache->>DB: SELECT key, value FROM system_settings
+        DB-->>Cache: rows
+        Cache-->>RH: parsed boolean (失败回退 true)
+    end
+    alt value === false
+        RH-->>FE: 403 当前不允许上传文档
+    else value === true
+        RH->>DB: 上传文件 + 创建 documents 记录
+        RH-->>FE: 201 Document
+    end
+```
+
+### 调用点清单
+
+- `POST /api/documents/upload`：入口判断 `allow_user_upload`，`false` 时返回 403。
+- `DELETE /api/documents/[id]`：入口判断 `allow_user_delete_own`，`false` 时返回 403。
+- `GET /api/documents` 与 `GET /api/documents/[id]`：判断 `public_documents_visible`：
+  - `true` → 查询条件 `user_id=auth.uid() OR document_scope='public'`；
+  - `false` → 查询条件仅 `user_id=auth.uid()`。
+- `audit_log_enabled` 在本 spec 中只透传读取，不写入审计记录；具体审计日志写入由 noter-admin 范围实现。
+
+---
+
+## 公共文档可见性策略
+
+公共文档（`documents.document_scope='public'`）由系统账号持有，由 noter-admin 平台维护内容、文件夹归属与官方标签；本 spec 中 noter-web 仅以**只读**语义对外展示。
+
+| 入口 | 行为 |
+|------|------|
+| `GET /api/folders` | 合并 `user_id=auth.uid() OR is_system_folder=true`；系统文件夹置顶；私有文件夹按用户私有文档计数 `documentCount`，系统文件夹按 `document_scope='public'` 公共文档计数 |
+| `GET /api/documents` | 按 `public_documents_visible` 决定是否合并查询公共文档（见上节）；标签关联仍仅查 `user_id=auth.uid()` 的 `document_tags`（公共文档的官方标签由 noter-admin 维护，不在本 spec 范围内对外展示） |
+| `GET /api/documents/[id]` | 同上；响应额外携带 `documentScope: 'private' \| 'public'` |
+| `DELETE /api/documents/[id]` | 仅允许删除自己的私有文档；公共文档由 RLS 自然拒绝 |
+| 文档详情页前端 | 收到 `documentScope === 'public'` 时按只读语义渲染：`DocumentTagPicker`、封面更换 / 删除等可写入的操作隐藏或禁用 |
+| `FolderSidebar` | `isSystemFolder === true` 的文件夹禁用重命名 / 删除入口；`UploadDialog` 的「保存到」过滤掉系统文件夹 |
+| `PATCH/DELETE /api/folders/[id]` | 业务层先 query `is_system_folder`，命中时直接返回 403；RLS 作为兜底再拒一次 |
 
 ---
 
@@ -971,6 +1267,7 @@ sequenceDiagram
 - **Edge Function 链式触发**：每个 Edge Function 完成后主动调用下一个，形成 `parse-document → vectorize-document → (generate-summary ∥ generate-mindmap)` 的链路
 - **状态最终一致**：`generate-summary` 和 `generate-mindmap` 并行执行，两者均完成后将文档状态更新为 `ready`（通过数据库条件更新实现：仅当 summary_status 和 mindmap_status 均为 success 时才设置 status=ready）
 - **失败隔离**：任一 Edge Function 失败只影响当前步骤，不回滚前序步骤的结果；失败时将 status 标记为 `failed` 并记录错误信息
+- **手动重新生成**：`POST /api/ai/regenerate-summary` 与 `POST /api/ai/regenerate-mindmap` 由 Route Handler 直接调用对应 Edge Function（`generate-summary` / `generate-mindmap`），独立于上传链路；前端调用后按相同的 3s 一次轮询机制等待 `summary_status` / `mindmap_status` 转为 `success` 或 `failed`，`success` 后由前端再 `GET /api/documents/[id]` 拉详情刷新 `SummaryCard` / `MindmapViewer`
 
 ### 关键实现细节
 
@@ -1080,27 +1377,34 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 apps/noter-web/
 ├── app/
 │   ├── (main)/
-│   │   └── documents/
-│   │       ├── page.tsx              # 文档管理主页面（左侧文件夹导航 | 右侧主内容）
-│   │       └── [id]/
-│   │           └── page.tsx          # 文档详情页（三栏：大纲 | 正文 | 元数据）
+│   │   ├── documents/
+│   │   │   ├── page.tsx              # 文档管理主页面（顶部 DocumentsHeader + 三段式：FolderSidebar | 主内容 | TagFilterList）
+│   │   │   └── [id]/
+│   │   │       └── page.tsx          # 文档详情页（顶部 DocumentDetailHeader + 三栏：大纲 | 正文 | 元数据 + AIChatPanel）
+│   │   └── profile/
+│   │       ├── page.tsx              # 账号设置页：左侧 Tab + 右侧内容 + 顶部「返回」
+│   │       ├── ProfileSection.tsx    # 个人资料 Tab
+│   │       ├── PasswordSection.tsx   # 修改密码 Tab
+│   │       └── EmailSection.tsx      # 修改邮箱 Tab
 │   └── api/
 │       ├── documents/
-│       │   ├── route.ts              # GET 列表（支持 folderId 筛选）
+│       │   ├── route.ts              # GET 列表（支持 folderId / status / fileExts / createdFrom-To 筛选 + 多字段排序 + 公共文档合并）
 │       │   ├── upload/
-│       │   │   └── route.ts          # POST 上传（FormData 含 folderId）
+│       │   │   └── route.ts          # POST 上传（FormData 含 folderId）；allow_user_upload=false 时 403
 │       │   └── [id]/
-│       │       ├── route.ts          # GET 详情, DELETE 删除
+│       │       ├── route.ts          # GET 详情（带 documentScope）, DELETE 删除（allow_user_delete_own=false 时 403）
 │       │       ├── status/
 │       │       │   └── route.ts      # GET 状态查询
+│       │       ├── cover/
+│       │       │   └── route.ts      # POST 上传 / 更换封面，DELETE 恢复默认
 │       │       └── tags/
 │       │           ├── route.ts      # POST 添加标签
 │       │           └── [tagId]/
-│       │               └── route.ts  # DELETE 移除标签
+│       │               └── route.ts  # DELETE 解除关联（带 tagDeleted 级联软删）
 │       ├── folders/
-│       │   ├── route.ts              # GET 列表, POST 创建
+│       │   ├── route.ts              # GET 列表（合并系统文件夹 + isSystemFolder 字段）, POST 创建
 │       │   └── [id]/
-│       │       └── route.ts          # PATCH 更新, DELETE 删除
+│       │       └── route.ts          # PATCH 更新, DELETE 删除（系统文件夹直接 403）
 │       ├── tags/
 │       │   ├── route.ts              # GET 列表, POST 创建
 │       │   └── [id]/
@@ -1108,24 +1412,24 @@ apps/noter-web/
 │       ├── search/
 │       │   └── route.ts              # GET 混合搜索（生成 embedding → 调用 hybrid_search RPC）
 │       └── ai/
-│           ├── chat/
-│           │   └── stream/
-│           │       └── route.ts      # POST 流式问答（后续迭代，本阶段不实现）
-│           ├── history/
-│           │   └── route.ts          # GET 对话历史（后续迭代，本阶段不实现）
 │           ├── regenerate-summary/
 │           │   └── route.ts          # POST 重新生成总结
 │           └── regenerate-mindmap/
 │               └── route.ts          # POST 重新生成思维导图
+│           # 注：/api/ai/chat/stream、/api/ai/sessions/* 由 noter-agent spec 维护
 ├── components/
 │   ├── documents/                    # 文档列表页组件
+│   │   ├── DocumentsHeader.tsx       # 顶部 sticky 胶囊导航
 │   │   ├── DocumentGrid.tsx
 │   │   ├── DocumentCard.tsx          # 电影海报比例 (aspect-[2/3], max-w-[160px])
-│   │   ├── PaginationController.tsx
+│   │   ├── DocumentCardMenu.tsx      # 卡片左上角三点菜单
+│   │   ├── PaginationController.tsx  # ⚠️ 已下线
+│   │   ├── LoadMoreController.tsx    # 「加载更多」/「已经到底啦」终态
 │   │   ├── SearchBar.tsx
 │   │   ├── FilterSortBar.tsx         # Notion 风格筛选排序栏
 │   │   ├── FolderSidebar.tsx         # 左侧文件夹导航
-│   │   ├── UploadDialog.tsx
+│   │   ├── UserAvatarDropdown.tsx    # 用户头像下拉
+│   │   ├── UploadDialog.tsx          # 多文件队列 + 文件夹选择
 │   │   ├── UploadProgress.tsx
 │   │   └── EmptyState.tsx
 │   └── document-detail/              # 文档详情页组件
@@ -1138,42 +1442,48 @@ apps/noter-web/
 │       │   ├── academic/             # 学术论文
 │       │   ├── compact/              # 紧凑
 │       │   └── card/                 # 卡片
+│       ├── DocumentDetailHeader.tsx  # 顶部 sticky 居中胶囊
 │       ├── TemplateSwitcher.tsx
 │       ├── DocumentOutline.tsx       # shadcn ScrollArea, sticky top-28
-│       ├── DocumentMeta.tsx          # 右侧元数据面板
-│       ├── AIChatPanel.tsx           # 仅 UI，不实现后端
+│       ├── DocumentMeta.tsx          # 右侧元数据面板（含标签管理区）
+│       ├── DocumentTagPicker.tsx     # 内联标签选择器
+│       ├── AIChatPanel.tsx           # 容器层：尺寸切换 + 显隐；Skill 实现见 noter-agent spec
 │       ├── ChatMessage.tsx
-│       ├── MindmapViewer.tsx
+│       ├── MindmapViewer.tsx         # 基于 @xyflow/react 的左→右树形布局
 │       ├── SummaryCard.tsx
 │       └── DownloadButton.tsx        # 仅需 title prop, window.print() 方案
-├── lib/axios/
-│   ├── documents.ts                  # 扩展
-│   ├── folders.ts                    # 新增
-│   ├── tags.ts                       # 新增
-│   ├── search.ts                     # 扩展
-│   └── ai.ts                         # 扩展
+├── lib/
+│   ├── axios/
+│   │   ├── documents.ts              # 扩展（含 uploadCover / resetCover）
+│   │   ├── folders.ts                # 新增
+│   │   ├── tags.ts                   # 新增（含 removeFromDocument 返回 tagDeleted）
+│   │   ├── search.ts                 # 扩展
+│   │   └── ai.ts                     # 扩展（regenerate-summary / regenerate-mindmap）
+│   └── settings/
+│       └── readSetting.ts            # 新增：30s 进程缓存读取 system_settings 开关
 ├── stores/
-│   ├── document.ts                   # 新增
-│   ├── folders.ts                    # 新增
-│   ├── tags.ts                       # 新增
-│   └── documentDetail.ts            # 新增
+│   ├── document.ts                   # hasMore / loadingMore / loadMore / filters / setSort 等
+│   ├── folders.ts
+│   ├── tags.ts
+│   └── documentDetail.ts             # panelSize / summaryStatus / mindmapStatus / pollingTimer / addTagToDocument 等
 ├── types/
-│   ├── document.ts                   # 新增
-│   ├── folder.ts                     # 新增
-│   ├── template.ts                   # 新增（TemplateConfig 接口）
-│   ├── search.ts                     # 扩展
-│   └── ai.ts                         # 扩展
+│   ├── document.ts                   # 含 coverUrl / documentScope，ListParams 扩展
+│   ├── folder.ts                     # 含 isSystemFolder
+│   ├── template.ts
+│   ├── search.ts
+│   └── ai.ts
 └── utils/feature/
     ├── documents/
-    │   └── schemas.ts                # 新增
+    │   └── schemas.ts                # listDocumentsSchema 含 status/fileExts/createdFrom-To/orderBy 扩展
     ├── folders/
-    │   └── schemas.ts                # 新增
+    │   └── schemas.ts
     ├── tags/
-    │   └── schemas.ts                # 新增
+    │   └── schemas.ts
     ├── search/
-    │   └── schemas.ts                # 新增
+    │   ├── schemas.ts
+    │   └── scrollAndHighlight.ts     # findFirstMatchInDom / scrollAndFlash / buildMatchAnchor
     └── ai/
-        └── schemas.ts                # 新增
+        └── schemas.ts
 
 supabase/functions/
 ├── parse-document/
@@ -1181,9 +1491,9 @@ supabase/functions/
 ├── vectorize-document/
 │   └── index.ts                      # 文本清洗、分片、向量化
 ├── generate-summary/
-│   └── index.ts                      # AI 总结生成
+│   └── index.ts                      # AI 总结生成（也用于 POST /api/ai/regenerate-summary）
 └── generate-mindmap/
-    └── index.ts                      # 思维导图生成
+    └── index.ts                      # 思维导图生成（也用于 POST /api/ai/regenerate-mindmap）
 ```
 
 ---
@@ -1354,6 +1664,65 @@ supabase/functions/
 
 **Validates: Requirements 12.3, 12.4**
 
+### Property 28: 默认封面稳定选取
+
+*For any* 文档 ID（任意非空字符串），多次调用 `pickDefaultCover(id)` 应返回完全相同的结果，且结果必定属于 5 张内置默认封面集合（`/covers/{blue,green,pink,puper,yellow}.svg`）。
+
+**Validates: Requirements 14.5**
+
+### Property 29: 封面文件类型与大小校验
+
+*For any* 待上传的封面文件 `f`：当 `f.type ∈ {image/jpeg, image/png, image/webp, image/gif}` 且 `f.size ≤ 5 × 1024 × 1024` 时，`POST /api/documents/[id]/cover` 应通过校验；否则应返回 400 并在错误信息中明确指出失败原因。
+
+**Validates: Requirements 14.2, 14.3**
+
+### Property 30: 面包屑回溯防循环
+
+*For any* `folders: Folder[]` 与任意 `folderId`（可为 null，可在 folders 中形成 `parentId` 环），`buildFolderTrail(folders, folderId)` 必定终止，且返回的 `trail` 数组长度 ≤ 16。
+
+**Validates: Requirements 15.4**
+
+### Property 31: 筛选 / 排序变化重置分页
+
+*For any* `useDocumentStore` 的初始状态与任意筛选 / 排序变化操作序列（`setFilters` / `resetFilters` / `setSort` / `setSelectedTags`），每次变化触发后，store 中的 `page === 1` 且 `documents` 列表被清空（即在 `fetchDocuments` 重新拉取前不会保留旧数据）。
+
+**Validates: Requirements 17.4, 17.5**
+
+### Property 32: tagDeleted 级联清理 selectedTags
+
+*For any* `useDocumentStore` 中任意初始 `selectedTags` 与任意 `tagId`，当 `removeTagFromDocument(tagId)` 调用结果为 `{ tagDeleted: true }` 时，操作完成后 `useDocumentStore.selectedTags` 中不再包含该 `tagId`。
+
+**Validates: Requirements 18.8**
+
+### Property 33: AI 状态轮询的终态停止与超时兜底
+
+*For any* `summaryStatus` 与 `mindmapStatus` 的合法状态序列：
+
+- 若两者都已进入终态（`success` 或 `failed`），则在最近一次轮询完成后 `useDocumentDetailStore.pollingTimer === null`；
+- 若任一项在 ≤ 100 次轮询内仍处于 `pending` / `running`，则到达第 100 次轮询时该项会被强制标记为 `failed`，且轮询会被立即停止。
+
+**Validates: Requirements 19.2, 19.5, 19.6**
+
+### Property 34: 上传进度 AI 阶段合并函数
+
+*For any* `(summary, mindmap)` 状态二元组（每项取值于 `{pending, running, success, failed}`），`mergeAiStatus(summary, mindmap)` 满足：
+
+- 任一为 `failed` → 输出 `failed`；
+- 两者均为 `success` → 输出 `success`；
+- 任一为 `running`，或恰一项为 `success` 而另一项仍未失败 → 输出 `running`；
+- 其余情况 → 输出 `pending`。
+
+**Validates: Requirements 20.3**
+
+### Property 35: 加载更多分页保留与累积
+
+*For any* 文档总数 `N` 与 `pageSize`，初始 `page=1` 经过 `k` 次成功的 `loadMore()` 调用后：
+
+- `documents.length === min(N, k+1) * pageSize`（最后一页若不足整页，按实际剩余数）；
+- 当 `(k+1) * pageSize >= N` 时 `hasMore === false`，且后续 `loadMore` 调用不会再增加 `documents.length`。
+
+**Validates: Requirements 1.4, 1.5**
+
 ---
 
 ## Error Handling
@@ -1372,12 +1741,15 @@ supabase/functions/
 | 操作 | 超时时间 | 处理方式 |
 |------|----------|----------|
 | 文档列表加载 | 15s (axios 默认) | 显示错误 + 重试按钮 |
-| 搜索请求 | 10s | 取消请求 + 错误提示 |
+| 搜索请求 | 10s | 取消请求 + 错误提示 + 重试按钮 |
 | 文档详情加载 | 15s | 显示错误 + 重试按钮 |
-| AI 问答生成 | — | 后续迭代，本阶段不实现 |
-| 思维导图重新生成 | 60s | 错误提示 + 保留重试按钮 |
-| AI 总结重新生成 | 30s | 错误提示 + 保留重试按钮 |
+| 封面上传 | 15s (axios 默认) | 错误 toast；不阻塞文档主链路 |
+| AI 状态轮询 | 单次 ≤ 3s（轮询间隔），累计上限 100 次（≈5min） | 超过上限把仍 in-progress 的项强制标记为 failed |
+| AI 问答生成 | — | noter-agent spec 范围 |
+| 思维导图重新生成 | 5min（与轮询上限一致） | 错误提示 + 保留重试按钮 |
+| AI 总结重新生成 | 5min（与轮询上限一致） | 错误提示 + 保留重试按钮 |
 | Edge Function 解析 | 5min | 标记 failed + 保留原始文件 |
+| `readSetting` 进程缓存 | 30s | TTL 过期或失败时回退默认值 true |
 
 ### 错误码规范
 
@@ -1425,14 +1797,15 @@ enum ErrorCode {
 
 ### 属性测试重点覆盖
 
-1. **纯函数逻辑**：格式化截断、输入校验、文件名生成、分片算法
-2. **数据转换**：Markdown URL 重写、搜索结果融合排序
-3. **约束验证**：分页计算、结果上限、节点数上限、消息数上限
-4. **安全属性**：数据隔离、路径格式、越权拒绝
+1. **纯函数逻辑**：格式化截断、输入校验、文件名生成、分片算法、`pickDefaultCover`、`mergeAiStatus`、`buildMatchAnchor` / `findFirstMatchInDom` 路径断言
+2. **数据转换**：Markdown URL 重写、搜索结果融合排序、`buildFolderTrail` 的 16 层防循环
+3. **约束验证**：分页计算、结果上限、节点数上限、消息数上限、`loadMore` 累积量
+4. **状态机不变量**：FilterSortBar 任意变化重置 `page=1`、`removeTagFromDocument(tagDeleted=true)` 清理 `selectedTags`、AI 轮询的终态停止与超时兜底
+5. **安全属性**：数据隔离（私有文档不互相泄漏 / 公共文档只读）、路径格式（封面 `userResources/{userId}/{documentId}.{ext}`）、越权拒绝、系统文件夹 UPDATE/DELETE 双重拒绝
 
 ### 单元测试重点覆盖
 
-1. **UI 组件**：骨架屏、空状态、错误状态、模板切换
-2. **Store 逻辑**：状态更新、异步操作
-3. **API 集成**：请求参数构造、响应解析
-4. **Edge Case**：超时处理、部分失败、会话过期
+1. **UI 组件**：骨架屏、空状态、错误状态、模板切换、`DocumentsHeader` / `DocumentDetailHeader` 胶囊导航、`UploadDialog` 多文件队列与文件夹选择、`DocumentCardMenu` 二次确认、`Profile` 页 Tab 切换
+2. **Store 逻辑**：状态更新、异步操作、乐观更新 + 回滚（删除文档、添加 / 移除标签、上传 / 重置封面）
+3. **API 集成**：请求参数构造、响应解析、`readSetting` 30s 缓存命中 / 失败回退默认值
+4. **Edge Case**：超时处理、部分失败、会话过期、面包屑空 / 单层 / 多层 / 成环、登出接口失败仍清除会话

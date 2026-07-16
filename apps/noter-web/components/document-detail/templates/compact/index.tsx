@@ -5,7 +5,7 @@ import type { TemplateConfig } from '@/types/template'
 export const compactTemplate: TemplateConfig = {
   name: 'compact',
   label: '紧凑',
-  description: '信息密度高，适合长文档快速浏览',
+  description: '高密度，长文速读',
   wrapperClassName: 'p-6 md:p-8',
   components: {
     h1: ({ children, id }) => (

@@ -5,7 +5,7 @@ import type { TemplateConfig } from '@/types/template'
 export const academicTemplate: TemplateConfig = {
   name: 'academic',
   label: '学术',
-  description: '衬线字体，论文风格，适合学术文档阅读',
+  description: '衬线字体，论文风格',
   wrapperClassName: 'p-8 md:p-14 max-w-[800px] mx-auto',
   components: {
     h1: ({ children, id }) => (

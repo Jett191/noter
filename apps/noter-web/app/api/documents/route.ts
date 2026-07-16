@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { handler } from '@/utils/http/handler'
 import { success, error } from '@/utils/http/response'
 import { listDocumentsSchema } from '@/utils/feature/documents/schemas'
+import { readSetting } from '@/lib/settings/readSetting'
 import type { PaginatedResult, Document, Tag } from '@/types/document'
 
 export const GET = handler(async (request: Request) => {
@@ -22,27 +23,87 @@ export const GET = handler(async (request: Request) => {
     pageSize: url.searchParams.get('pageSize') ?? undefined,
     orderBy: url.searchParams.get('orderBy') ?? undefined,
     order: url.searchParams.get('order') ?? undefined,
-    tagIds: url.searchParams.getAll('tagIds').length ? url.searchParams.getAll('tagIds') : undefined
+    tagIds: url.searchParams.getAll('tagIds').length
+      ? url.searchParams.getAll('tagIds')
+      : undefined,
+    fileExts: url.searchParams.getAll('fileExts').length
+      ? url.searchParams.getAll('fileExts')
+      : undefined,
+    status: url.searchParams.get('status') ?? undefined,
+    isFavorite: url.searchParams.get('isFavorite') ?? undefined,
+    isArchived: url.searchParams.get('isArchived') ?? undefined,
+    createdFrom: url.searchParams.get('createdFrom') ?? undefined,
+    createdTo: url.searchParams.get('createdTo') ?? undefined
   }
 
   const params = listDocumentsSchema.parse(rawParams)
-  const { page, pageSize, tagIds, orderBy, order } = params
+  const {
+    page,
+    pageSize,
+    tagIds,
+    orderBy,
+    order,
+    status,
+    isFavorite,
+    isArchived,
+    fileExts,
+    createdFrom,
+    createdTo
+  } = params
   const folderId = url.searchParams.get('folderId')
 
   // 计算分页范围
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
 
-  // 构建查询
-  let query = supabase
-    .from('documents')
-    .select('*', { count: 'exact' })
-    .eq('user_id', user.id)
-    .eq('deleted', 0)
+  // public_documents_visible 开关:关闭时,公共文档对普通用户隐藏 (admin-platform
+  // Requirements 24.1)。私有文档不受影响。
+  const publicVisible = await readSetting('public_documents_visible')
+
+  // 构建查询:
+  //   私有文档 (user_id=auth.uid()) ∪ 公共文档 (document_scope='public')
+  //   依赖 RLS policy documents_select_public 让 authenticated 用户看到公共文档,
+  //   应用层用 OR 条件让默认 list 视图自然合并两类。当用户筛选指定文件夹时:
+  //     - 系统文件夹 (folder_id 属于 is_system_folder=true 的某个文件夹) → 仅返回公共文档
+  //     - 普通文件夹 → 仅返回该用户的私有文档
+  //   实现上不区分,直接走 OR + folder_id 等值过滤即可。
+  let query = supabase.from('documents').select('*', { count: 'exact' }).eq('deleted', 0)
+
+  if (publicVisible) {
+    query = query.or(`user_id.eq.${user.id},document_scope.eq.public`)
+  } else {
+    query = query.eq('user_id', user.id)
+  }
 
   // 文件夹筛选
   if (folderId) {
     query = query.eq('folder_id', folderId)
+  }
+
+  // 状态筛选
+  if (status) {
+    query = query.eq('status', status)
+  }
+
+  // 收藏 / 归档筛选
+  if (typeof isFavorite === 'number') {
+    query = query.eq('is_favorite', isFavorite)
+  }
+  if (typeof isArchived === 'number') {
+    query = query.eq('is_archived', isArchived)
+  }
+
+  // 文件扩展名筛选（OR）
+  if (fileExts && fileExts.length > 0) {
+    query = query.in('file_ext', fileExts)
+  }
+
+  // 创建时间范围
+  if (createdFrom) {
+    query = query.gte('created_at', createdFrom)
+  }
+  if (createdTo) {
+    query = query.lte('created_at', createdTo)
   }
 
   // 标签筛选（OR 逻辑：文档关联了任一选中标签即匹配）
@@ -85,6 +146,8 @@ export const GET = handler(async (request: Request) => {
   }
 
   // 获取文档关联的标签
+  // 仅查 user_id=auth.uid() 的关联,公共文档的官方标签由详情页 / 公共展示场景
+  // 单独查询 (RLS 上 document_tags 未对 system_account 放开,这里也取不到)。
   const docIds = (documents ?? []).map((doc) => doc.id)
   const tagsMap: Record<string, Tag[]> = {}
 
@@ -134,6 +197,7 @@ export const GET = handler(async (request: Request) => {
     isArchived: doc.is_archived,
     deleted: doc.deleted,
     folderId: doc.folder_id ?? null,
+    coverUrl: doc.cover_url ?? null,
     tags: tagsMap[doc.id] ?? [],
     createdAt: doc.created_at,
     updatedAt: doc.updated_at

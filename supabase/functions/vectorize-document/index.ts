@@ -440,12 +440,11 @@ Deno.serve(async (req) => {
     const isTimeout = error instanceof DOMException && error.name === 'AbortError'
     const finalMessage = isTimeout ? 'vectorize-document timed out (2 minutes)' : errorMessage
 
-    // Mark as failed
+    // Mark vector_status as failed (不影响文档整体可阅读性，status 不再改为 failed)
     await supabase
       .from('documents')
       .update({
         vector_status: 'failed',
-        status: 'failed',
         updated_at: new Date().toISOString()
       })
       .eq('id', documentId)

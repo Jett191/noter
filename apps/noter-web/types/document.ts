@@ -38,6 +38,7 @@ export interface Document {
   isArchived: number
   deleted: number
   folderId: string | null
+  coverUrl: string | null
   tags: Tag[]
   createdAt: string
   updatedAt: string
@@ -138,7 +139,14 @@ export interface ListParams {
   folderId?: string
   isFavorite?: number
   isArchived?: number
-  orderBy?: 'created_at' | 'title' | 'file_size'
+  /** 整体状态筛选：ready / processing / failed */
+  status?: 'ready' | 'processing' | 'failed'
+  /** 文件扩展名筛选（多选 OR） */
+  fileExts?: string[]
+  /** 创建时间范围（ISO 字符串，含两端） */
+  createdFrom?: string
+  createdTo?: string
+  orderBy?: 'created_at' | 'updated_at' | 'title' | 'file_size' | 'word_count'
   order?: 'asc' | 'desc'
 }
 

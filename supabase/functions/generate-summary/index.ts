@@ -194,12 +194,11 @@ Deno.serve(async (req) => {
       if (documentId && userId) {
         const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-        // Update summary_status to failed and documents.status to failed
+        // Mark summary_status as failed only — 不影响文档整体可阅读性
         await supabase
           .from('documents')
           .update({
             summary_status: 'failed',
-            status: 'failed',
             updated_at: new Date().toISOString()
           })
           .eq('id', documentId)

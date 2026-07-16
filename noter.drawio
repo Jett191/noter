@@ -1,0 +1,132 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.6.6 Chrome/144.0.7559.236 Electron/40.8.4 Safari/537.36" version="29.6.6">
+  <diagram name="顶层数据流图" id="top-level-dfd">
+    <mxGraphModel dx="2078" dy="1000" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="1100" pageHeight="760" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="P0" parent="1" style="ellipse;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;fontColor=#000000;fontSize=18;fontStyle=1;align=center;verticalAlign=middle;spacing=10;" value="智能文档知识库系统" vertex="1">
+          <mxGeometry height="150" width="280" x="386" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="E_USER" parent="1" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;fontColor=#000000;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="普通用户" vertex="1">
+          <mxGeometry height="80" width="150" x="-119" y="196" as="geometry" />
+        </mxCell>
+        <mxCell id="E_ADMIN" parent="1" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;fontColor=#000000;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="系统管理员" vertex="1">
+          <mxGeometry height="80" width="150" x="1060" y="196" as="geometry" />
+        </mxCell>
+        <mxCell id="E_AUTH" parent="1" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;fontColor=#000000;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="第三方认证服务 GitHub OAuth / 邮件验证" vertex="1">
+          <mxGeometry height="80" width="280" x="386" y="155" as="geometry" />
+        </mxCell>
+        <mxCell id="E_AI" parent="1" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;fontColor=#000000;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="AI / 向量模型服务 LLM / Embedding" vertex="1">
+          <mxGeometry height="80" width="280" x="386" y="662" as="geometry" />
+        </mxCell>
+        <mxCell id="E_BROWSER" parent="1" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;fontColor=#000000;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="用户客户端 浏览器 / 前端页面" vertex="1">
+          <mxGeometry height="80" width="150" x="-72" y="570" as="geometry" />
+        </mxCell>
+        <mxCell id="E_ADMIN_CLIENT" parent="1" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#000000;fillColor=#ffffff;fontColor=#000000;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="管理端客户端 后台页面" vertex="1">
+          <mxGeometry height="80" width="150" x="873" y="570" as="geometry" />
+        </mxCell>
+        <mxCell id="F1" edge="1" parent="1" source="E_USER" style="endArrow=block;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;orthogonal=1;strokeColor=#000000;fontColor=#000000;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;" target="P0" value="注册登录信息 / 文档上传请求 / 检索问答请求">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="-44" y="341" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F2" edge="1" parent="1" source="P0" style="endArrow=block;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;orthogonal=1;strokeColor=#000000;fontColor=#000000;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;" target="E_USER" value="认证结果 / 文档列表 / 检索结果 / AI 回复结果">
+          <mxGeometry relative="1" x="0.3238" y="45" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="266" y="319" />
+              <mxPoint x="266" y="236" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F3" edge="1" parent="1" source="E_ADMIN" style="endArrow=block;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;orthogonal=1;strokeColor=#000000;fontColor=#000000;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;" target="P0" value="后台登录信息 / 管理操作请求 / 审计查询请求">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1135" y="342" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F4" edge="1" parent="1" source="P0" style="endArrow=block;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;orthogonal=1;strokeColor=#000000;fontColor=#000000;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;" target="E_ADMIN" value="管理结果 / 统计数据 / 审计日志结果">
+          <mxGeometry relative="1" x="0.3534" y="-2" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="740" y="317" />
+              <mxPoint x="740" y="224" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F5" edge="1" parent="1" source="P0" style="endArrow=block;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;orthogonal=1;strokeColor=#000000;fontColor=#000000;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;" target="E_AUTH" value="认证请求&amp;nbsp;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="483" y="294" />
+              <mxPoint x="483" y="294" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F6" edge="1" parent="1" source="E_AUTH" style="endArrow=block;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;orthogonal=1;strokeColor=#000000;fontColor=#000000;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;" target="P0" value="认证结果">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="564" y="296" />
+              <mxPoint x="564" y="296" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F7" edge="1" parent="1" source="P0" style="endArrow=block;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;orthogonal=1;strokeColor=#000000;fontColor=#000000;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;" target="E_AI" value="文档内容 / 用户问题 /&lt;div&gt;&amp;nbsp;向量生成请求 / 摘要思维导图请求&lt;/div&gt;">
+          <mxGeometry relative="1" x="0.0647" y="87" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="567" y="591" />
+              <mxPoint x="567" y="591" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F8" edge="1" parent="1" source="E_AI" style="endArrow=block;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;orthogonal=1;strokeColor=#000000;fontColor=#000000;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;" target="P0" value="向量结果 / AI 回答 / 摘要结果&lt;div&gt;&amp;nbsp;/ 思维导图结果&lt;/div&gt;">
+          <mxGeometry relative="1" x="-0.0528" y="67" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="488" y="589" />
+              <mxPoint x="488" y="589" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F9" edge="1" parent="1" source="E_BROWSER" style="endArrow=block;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;orthogonal=1;strokeColor=#000000;fontColor=#000000;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;" target="P0" value="页面访问请求 / 会话状态请求">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="3" y="385" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F10" edge="1" parent="1" source="P0" style="endArrow=block;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;orthogonal=1;strokeColor=#000000;fontColor=#000000;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;" target="E_BROWSER" value="页面渲染数据 / 操作反馈 / SSE 流式消息">
+          <mxGeometry relative="1" x="-0.3203" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="296" y="405" />
+              <mxPoint x="296" y="610" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F11" edge="1" parent="1" style="endArrow=block;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;orthogonal=1;strokeColor=#000000;fontColor=#000000;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;" value="后台页面访问请求 / 表单提交数据">
+          <mxGeometry relative="1" x="0.4395" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1112" y="612" />
+              <mxPoint x="1112" y="387" />
+            </Array>
+            <mxPoint x="1023" y="612" as="sourcePoint" />
+            <mxPoint x="666" y="387" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="F12" edge="1" parent="1" source="P0" style="endArrow=block;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;orthogonal=1;strokeColor=#000000;fontColor=#000000;fontSize=13;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;" target="E_ADMIN_CLIENT" value="后台页面数据 / 操作反馈">
+          <mxGeometry relative="1" x="-0.2743" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="948" y="439" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
