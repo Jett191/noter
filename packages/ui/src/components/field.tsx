@@ -179,7 +179,7 @@ function FieldError({
       return null
     }
 
-    // @ts-expect-error Map iterator issue
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const uniqueErrors = [...new Map(errors.map((error) => [error?.message, error])).values()]
 
     if (uniqueErrors?.length == 1) {

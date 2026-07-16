@@ -1,19 +1,27 @@
-import { Button } from '@noter/ui/components/button'
-import Link from 'next/link'
+import {
+  Navbar,
+  HeroSection,
+  ProblemSection,
+  FeaturesSection,
+  WorkflowSection,
+  PreviewSection,
+  AIToolsSection,
+  CTASection,
+  Footer
+} from '@/components/landing'
 
-function HomePage() {
+export default function HomePage() {
   return (
-    <main className=''>
-      <nav className='m-6 flex items-center justify-center gap-3'>
-        <Link href={'/signin'}>
-          <Button>SignIn</Button>
-        </Link>
-        <Link href={'/signup'}>
-          <Button>SignUp</Button>
-        </Link>
-      </nav>
+    <main className='min-h-screen bg-white font-[family-name:var(--font-sans)]'>
+      <Navbar />
+      <HeroSection />
+      <ProblemSection />
+      <FeaturesSection />
+      <WorkflowSection />
+      <PreviewSection />
+      <AIToolsSection />
+      <CTASection />
+      <Footer />
     </main>
   )
 }
-
-export default HomePage

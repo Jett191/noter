@@ -54,3 +54,8 @@ logs
 Thumbs.db
 
 .idea
+
+
+*.next/
+
+*dist/
