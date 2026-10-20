@@ -38,7 +38,7 @@ This package reads its configuration from **process env**. It does not load its 
 | --------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------- |
 | `SUPABASE_URL`              | Supabase project URL. Falls back to `NEXT_PUBLIC_SUPABASE_URL` when running inside the noter-web process. | `apps/noter-web/.env.local`             |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (DB access bypassing RLS — used for `agent_skill_sessions` and tool SQL).      | `apps/noter-web/.env.local` ✅ already set |
-| `MIMO_API_KEY`              | API key for MiMo LLM (`mimo-v2.5-pro`).                                                                  | `apps/noter-web/.env.local` ⚠️ **MISSING** |
+| `MIMO_API_KEY`              | API key for MiMo LLM (`mimo-v2.6-pro`).                                                                  | `apps/noter-web/.env.local` ⚠️ **MISSING** |
 | `GEMINI_API_KEY`            | API key for Gemini Embedding (`gemini-embedding-2`, 768 维).                                             | `apps/noter-web/.env.local` ⚠️ may exist as `EMBEDDING_API_KEY` — see note |
 
 ### Notes on the current `apps/noter-web/.env.local`
@@ -54,7 +54,7 @@ At the time this package was scaffolded, `apps/noter-web/.env.local` already had
 Still **missing** and must be added to `apps/noter-web/.env.local` before the agent can run end-to-end:
 
 ```dotenv
-# MiMo LLM (mimo-v2.5-pro) — required by all 5 Skills
+# MiMo LLM (mimo-v2.6-pro) — required by all 5 Skills
 MIMO_API_KEY=...
 
 # Gemini Embedding (gemini-embedding-2, 768 dim) — required by /explain

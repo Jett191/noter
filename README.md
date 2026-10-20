@@ -66,7 +66,7 @@ Noter 是一个基于 Next.js 与 Supabase 构建的 AI 文档知识工作台。
 | Serverless | Supabase Edge Functions |
 | Vector Search | pgvector、Gemini Embedding 768 维向量 |
 | Document Parsing | LlamaParse API |
-| LLM | MiMo `mimo-v2.5-pro`，OpenAI Chat Completions 兼容接口 |
+| LLM | MiMo `mimo-v2.6-pro`，OpenAI Chat Completions 兼容接口 |
 | Streaming | Server-Sent Events（SSE） |
 | Test | Vitest、fast-check |
 | Engineering | pnpm Workspace、ESLint、Prettier、Husky、lint-staged、Commitlint、Commitizen |

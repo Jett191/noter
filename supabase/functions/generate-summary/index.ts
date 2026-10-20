@@ -7,7 +7,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const LLM_API_KEY = Deno.env.get('LLM')!
 
 const LLM_ENDPOINT = 'https://token-plan-sgp.xiaomimimo.com/v1/chat/completions'
-const LLM_MODEL = 'mimo-v2.5-pro'
+const LLM_MODEL = 'mimo-v2.6-pro'
 const MIN_CONTENT_LENGTH = 50
 
 interface SummaryResult {

@@ -1,5 +1,5 @@
 /**
- * LLMTool —— MiMo LLM (mimo-v2.5-pro) 调用封装。
+ * LLMTool —— MiMo LLM (mimo-v2.6-pro) 调用封装。
  *
  * MiMo API 与 OpenAI Chat Completions 兼容：
  *   POST {MIMO_BASE_URL}/chat/completions
@@ -15,7 +15,7 @@
  * 假设说明：
  * - MIMO_BASE_URL 默认 `https://token-plan-sgp.xiaomimimo.com/v1`，与 supabase
  *   functions/generate-summary 保持一致；可通过环境变量覆盖（便于本地测试）
- * - 默认 model 为 `mimo-v2.5-pro`
+ * - 默认 model 为 `mimo-v2.6-pro`
  * - JSON 模式通过设置 `response_format: { type: 'json_object' }` + system 提示双保险
  *
  * Validates: Requirements 7.5, 7.14, 13.3, 13.4
@@ -28,7 +28,7 @@ import type { ZodSchema } from 'zod'
 // ---------------------------------------------------------------------------
 
 const DEFAULT_BASE_URL = 'https://token-plan-sgp.xiaomimimo.com/v1'
-const DEFAULT_MODEL = 'mimo-v2.5-pro'
+const DEFAULT_MODEL = 'mimo-v2.6-pro'
 const DEFAULT_TIMEOUT_MS = 60_000
 
 function getApiKey(): string {
@@ -58,7 +58,7 @@ export interface LLMMessage {
 export type LLMPrompt = string | LLMMessage[]
 
 export interface LLMOptions {
-  /** 覆盖默认 model，例如 `mimo-v2.5-pro` */
+  /** 覆盖默认 model，例如 `mimo-v2.6-pro` */
   model?: string
   /** 0-2，默认 0.3（与 supabase Edge Functions 现有调用约定一致） */
   temperature?: number
