@@ -1995,7 +1995,7 @@ combined AS (
 
 ## 7.2 软件测试环境
 
-测试环境与开发环境同源，避免「能跑通开发但跑不通测试」的环境漂移。本环境以作者本地 macOS 14 为基底，Node.js 沿用 20.x LTS，包管理仍由 pnpm 10.32.1 接管 monorepo 工作区。单元与集成测试由 vitest 承担，apps/noter-admin 端使用 vitest 4.1.6，packages/agent-runtime 使用 vitest 3.2.4，并以 fast-check 3.23 提供属性测试支持；端到端测试由 @playwright/test 1.51 在 chromium 单浏览器下运行，运行前按 tests/README 指引手动安装。后端侧通过 Supabase CLI 1.x 在本地起一份与生产同结构的 supabase 实例，迁移与 RLS 集成测试在该实例上执行；外部依赖侧调用 LlamaParse v2 完成文档解析，调用 Google Gemini gemini-embedding-2 生成 768 维向量，调用 mimo-v2.5-pro 生成 AI 总结与思维导图。浏览器端在 Chrome 与 Edge 最新稳定版下交叉验证用户端阅读页面与管理端编辑器。具体配置如表 7.1 所示。
+测试环境与开发环境同源，避免「能跑通开发但跑不通测试」的环境漂移。本环境以作者本地 macOS 14 为基底，Node.js 沿用 20.x LTS，包管理仍由 pnpm 10.32.1 接管 monorepo 工作区。单元与集成测试由 vitest 承担，apps/noter-admin 端使用 vitest 4.1.6，packages/agent-runtime 使用 vitest 3.2.4，并以 fast-check 3.23 提供属性测试支持；端到端测试由 @playwright/test 1.51 在 chromium 单浏览器下运行，运行前按 tests/README 指引手动安装。后端侧通过 Supabase CLI 1.x 在本地起一份与生产同结构的 supabase 实例，迁移与 RLS 集成测试在该实例上执行；外部依赖侧调用 LlamaParse v2 完成文档解析，调用 Google Gemini gemini-embedding-2 生成 768 维向量，调用 mimo-v2.6-pro 生成 AI 总结与思维导图。浏览器端在 Chrome 与 Edge 最新稳定版下交叉验证用户端阅读页面与管理端编辑器。具体配置如表 7.1 所示。
 
 | 类别 | 名称 | 版本 | 备注 |
 | --- | --- | --- | --- |
@@ -2012,7 +2012,7 @@ combined AS (
 | 数据库 | Supabase Postgres + pgvector | 内置 | 承接 RLS 策略与混合搜索 RPC 集成测试 |
 | 文档解析 API | LlamaParse | v2 | parse-document Edge Function 远端依赖 |
 | 嵌入模型 API | Google Gemini gemini-embedding-2 | 768 维输出 | vectorize-document Edge Function 远端依赖 |
-| LLM API | mimo-v2.5-pro | 远端服务 | generate-summary 与 generate-mindmap 远端依赖 |
+| LLM API | mimo-v2.6-pro | 远端服务 | generate-summary 与 generate-mindmap 远端依赖 |
 
 表 7.1 软件测试环境一览
 

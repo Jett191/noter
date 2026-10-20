@@ -257,7 +257,7 @@ Deno.serve(async (req) => {
         Authorization: `Bearer ${llmApiKey}`
       },
       body: JSON.stringify({
-        model: 'mimo-v2.5-pro',
+        model: 'mimo-v2.6-pro',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3
       })
@@ -296,7 +296,7 @@ Deno.serve(async (req) => {
       document_id: documentId,
       mindmap_json: mindmapData,
       markdown_outline: markdownOutline,
-      model_name: 'mimo-v2.5-pro',
+      model_name: 'mimo-v2.6-pro',
       deleted: 0,
       generated_at: now,
       created_at: now,

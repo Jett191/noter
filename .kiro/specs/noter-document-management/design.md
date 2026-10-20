@@ -45,7 +45,7 @@ graph TB
     subgraph External["外部服务"]
         LlamaParse["LlamaParse REST API v2"]
         EmbeddingAPI["Gemini Embedding API (gemini-embedding-2, 768维)"]
-        LLMAPI["小米 MiMo LLM API (mimo-v2.5-pro)"]
+        LLMAPI["小米 MiMo LLM API (mimo-v2.6-pro)"]
     end
 
     UI --> Store
@@ -980,7 +980,7 @@ export interface UpdateFolderInput {
 | 服务 | Endpoint | 模型 | 向量维度 | Secret 名称 |
 |------|----------|------|----------|-------------|
 | Gemini Embedding | `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent` | gemini-embedding-2 | 768（需要 outputDimensionality: 768 参数） | `Embedding` |
-| 小米 MiMo LLM | `https://token-plan-sgp.xiaomimimo.com/v1/chat/completions` | mimo-v2.5-pro | — | `LLM` |
+| 小米 MiMo LLM | `https://token-plan-sgp.xiaomimimo.com/v1/chat/completions` | mimo-v2.6-pro | — | `LLM` |
 | LlamaParse | `https://api.cloud.llamaindex.ai/api/v2/parse` | agentic tier | — | `LlamaParse` |
 
 ### Edge Function 环境变量（Supabase Secrets）
@@ -1026,7 +1026,7 @@ const response = await fetch('https://token-plan-sgp.xiaomimimo.com/v1/chat/comp
     'Authorization': `Bearer ${Deno.env.get('LLM')}`,
   },
   body: JSON.stringify({
-    model: 'mimo-v2.5-pro',
+    model: 'mimo-v2.6-pro',
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.3,
   }),

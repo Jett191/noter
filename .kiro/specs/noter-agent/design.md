@@ -1069,7 +1069,7 @@ export interface SSEEvent {
 | `packages/agent-runtime`（monorepo workspace 包） | agent 主体，运行在 Next.js Route Handler 进程内（Node.js 运行时） |
 | `@supabase/supabase-js` | DB 客户端（pnpm workspace 共享，与 noter-web 复用同一版本） |
 | Gemini Embedding (`gemini-embedding-2`, 768 维) | `/explain` 概念向量化 |
-| MiMo LLM (`mimo-v2.5-pro`) | 所有 Skill 的语言生成；`/quiz` 用 JSON 模式 |
+| MiMo LLM (`mimo-v2.6-pro`) | 所有 Skill 的语言生成；`/quiz` 用 JSON 模式 |
 | `react-markdown` + `remark-gfm` | 前端 Markdown 渲染（已有） |
 | 新增 `hybrid_search_scoped` RPC（基于 noter-document-management 已有的 hybrid_search 算法、追加 user_id + document_id 强制过滤） | `/explain` 检索 |
 
